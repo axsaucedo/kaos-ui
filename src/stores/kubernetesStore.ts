@@ -44,6 +44,7 @@ interface KubernetesState {
   autoRefreshEnabled: boolean;
   autoRefreshInterval: number; // in milliseconds
   isRefreshing: boolean;
+  nextRefreshTime: number | null; // timestamp when next refresh will occur
   
   // Actions
   setModelAPIs: (apis: ModelAPI[]) => void;
@@ -93,6 +94,8 @@ interface KubernetesState {
   setAutoRefreshEnabled: (enabled: boolean) => void;
   setAutoRefreshInterval: (interval: number) => void;
   setIsRefreshing: (refreshing: boolean) => void;
+  setNextRefreshTime: (time: number | null) => void;
+  resetCountdown: () => void;
 }
 
 // No mock data - all data comes from real Kubernetes API
@@ -122,6 +125,7 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   autoRefreshEnabled: JSON.parse(localStorage.getItem('autoRefreshEnabled') || 'true'),
   autoRefreshInterval: JSON.parse(localStorage.getItem('autoRefreshInterval') || '30000'),
   isRefreshing: false,
+  nextRefreshTime: null,
   
   // ModelAPI actions
   setModelAPIs: (apis) => set({ modelAPIs: apis }),
@@ -202,4 +206,10 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
     set({ autoRefreshInterval: interval });
   },
   setIsRefreshing: (refreshing) => set({ isRefreshing: refreshing }),
+  setNextRefreshTime: (time) => set({ nextRefreshTime: time }),
+  resetCountdown: () => set((state) => ({ 
+    nextRefreshTime: state.autoRefreshEnabled && state.autoRefreshInterval > 0 
+      ? Date.now() + state.autoRefreshInterval 
+      : null 
+  })),
 }));

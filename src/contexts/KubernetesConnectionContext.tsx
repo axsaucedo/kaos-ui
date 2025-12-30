@@ -134,12 +134,18 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     
     const interval = store.autoRefreshInterval;
     if (!store.autoRefreshEnabled || interval <= 0) {
+      store.setNextRefreshTime(null);
       return;
     }
+    
+    // Reset countdown immediately
+    store.setNextRefreshTime(Date.now() + interval);
     
     pollIntervalRef.current = setInterval(() => {
       if (k8sClient.isConfigured()) {
         refreshAll();
+        // Reset countdown after each refresh
+        store.setNextRefreshTime(Date.now() + interval);
       }
     }, interval);
   }, [refreshAll, store.autoRefreshEnabled, store.autoRefreshInterval]);
@@ -150,7 +156,8 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       clearInterval(pollIntervalRef.current);
       pollIntervalRef.current = null;
     }
-  }, []);
+    store.setNextRefreshTime(null);
+  }, [store]);
 
   // Connect
   const connect = useCallback(async (baseUrl: string, namespace: string = 'default'): Promise<boolean> => {
