@@ -136,11 +136,14 @@ class KubernetesClient {
   // ============= ModelAPI CRUD =============
   async listModelAPIs(namespace?: string): Promise<ModelAPI[]> {
     const ns = namespace || this.config.namespace;
+    const path = this.getCrdPath('modelapis', ns);
+    console.log(`[k8sClient] Fetching ModelAPIs from: ${path}`);
     try {
-      const response = await this.request<K8sListResponse<ModelAPI>>(this.getCrdPath('modelapis', ns));
+      const response = await this.request<K8sListResponse<ModelAPI>>(path);
+      console.log(`[k8sClient] Found ${response.items.length} ModelAPIs`);
       return response.items;
     } catch (error) {
-      console.warn('ModelAPI CRD not found:', error);
+      console.warn('[k8sClient] ModelAPI CRD not found:', error);
       return [];
     }
   }
@@ -174,11 +177,14 @@ class KubernetesClient {
   // ============= MCPServer CRUD =============
   async listMCPServers(namespace?: string): Promise<MCPServer[]> {
     const ns = namespace || this.config.namespace;
+    const path = this.getCrdPath('mcpservers', ns);
+    console.log(`[k8sClient] Fetching MCPServers from: ${path}`);
     try {
-      const response = await this.request<K8sListResponse<MCPServer>>(this.getCrdPath('mcpservers', ns));
+      const response = await this.request<K8sListResponse<MCPServer>>(path);
+      console.log(`[k8sClient] Found ${response.items.length} MCPServers`);
       return response.items;
     } catch (error) {
-      console.warn('MCPServer CRD not found:', error);
+      console.warn('[k8sClient] MCPServer CRD not found:', error);
       return [];
     }
   }
@@ -212,11 +218,14 @@ class KubernetesClient {
   // ============= Agent CRUD =============
   async listAgents(namespace?: string): Promise<Agent[]> {
     const ns = namespace || this.config.namespace;
+    const path = this.getCrdPath('agents', ns);
+    console.log(`[k8sClient] Fetching Agents from: ${path}`);
     try {
-      const response = await this.request<K8sListResponse<Agent>>(this.getCrdPath('agents', ns));
+      const response = await this.request<K8sListResponse<Agent>>(path);
+      console.log(`[k8sClient] Found ${response.items.length} Agents`);
       return response.items;
     } catch (error) {
-      console.warn('Agent CRD not found:', error);
+      console.warn('[k8sClient] Agent CRD not found:', error);
       return [];
     }
   }

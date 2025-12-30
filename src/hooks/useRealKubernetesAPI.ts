@@ -70,6 +70,10 @@ export function useRealKubernetesAPI() {
 
   // Fetch and sync all resources
   const refreshAll = useCallback(async () => {
+    console.log('[useRealKubernetesAPI] refreshAll called');
+    console.log('[useRealKubernetesAPI] k8sClient configured:', k8sClient.isConfigured());
+    console.log('[useRealKubernetesAPI] k8sClient config:', k8sClient.getConfig());
+    
     if (!k8sClient.isConfigured()) {
       setState(s => ({ ...s, error: 'Not configured' }));
       return;
@@ -79,15 +83,26 @@ export function useRealKubernetesAPI() {
 
     try {
       // Fetch all resources in parallel
+      console.log('[useRealKubernetesAPI] Fetching all resources...');
       const [modelAPIs, mcpServers, agents, pods, deployments, pvcs, services] = await Promise.all([
-        k8sClient.listModelAPIs().catch(() => []),
-        k8sClient.listMCPServers().catch(() => []),
-        k8sClient.listAgents().catch(() => []),
-        k8sClient.listPods().catch(() => []),
-        k8sClient.listDeployments().catch(() => []),
-        k8sClient.listPVCs().catch(() => []),
-        k8sClient.listServices().catch(() => []),
+        k8sClient.listModelAPIs().catch((e) => { console.error('[useRealKubernetesAPI] ModelAPIs error:', e); return []; }),
+        k8sClient.listMCPServers().catch((e) => { console.error('[useRealKubernetesAPI] MCPServers error:', e); return []; }),
+        k8sClient.listAgents().catch((e) => { console.error('[useRealKubernetesAPI] Agents error:', e); return []; }),
+        k8sClient.listPods().catch((e) => { console.error('[useRealKubernetesAPI] Pods error:', e); return []; }),
+        k8sClient.listDeployments().catch((e) => { console.error('[useRealKubernetesAPI] Deployments error:', e); return []; }),
+        k8sClient.listPVCs().catch((e) => { console.error('[useRealKubernetesAPI] PVCs error:', e); return []; }),
+        k8sClient.listServices().catch((e) => { console.error('[useRealKubernetesAPI] Services error:', e); return []; }),
       ]);
+
+      console.log('[useRealKubernetesAPI] Fetched resources:', {
+        modelAPIs: modelAPIs.length,
+        mcpServers: mcpServers.length,
+        agents: agents.length,
+        pods: pods.length,
+        deployments: deployments.length,
+        pvcs: pvcs.length,
+        services: services.length,
+      });
 
       // Sync to store
       store.setModelAPIs(modelAPIs);
@@ -106,9 +121,10 @@ export function useRealKubernetesAPI() {
         lastRefresh: new Date(),
       }));
 
-      addLogEntry('info', 'Refreshed all resources from cluster', 'api-client');
+      addLogEntry('info', `Refreshed: ${modelAPIs.length} ModelAPIs, ${mcpServers.length} MCPServers, ${agents.length} Agents`, 'api-client');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch resources';
+      console.error('[useRealKubernetesAPI] refreshAll error:', error);
       setState(s => ({ ...s, loading: false, error: message }));
       addLogEntry('error', message, 'api-client');
     }

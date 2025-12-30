@@ -11,7 +11,8 @@ import { DeploymentsList } from '@/components/kubernetes/DeploymentsList';
 import { VolumesList } from '@/components/kubernetes/VolumesList';
 import { ConnectionSettings } from '@/components/settings/ConnectionSettings';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
-import { Settings, AlertCircle, Search, Download, Trash2 } from 'lucide-react';
+import { KubernetesConnectionProvider } from '@/contexts/KubernetesConnectionContext';
+import { Settings, AlertCircle, Search, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -78,7 +79,7 @@ function LogsViewer() {
   );
 }
 
-const Index = () => {
+function IndexContent() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const { activeTab } = useKubernetesStore();
 
@@ -124,6 +125,14 @@ const Index = () => {
         <main className="flex-1 overflow-auto">{renderContent()}</main>
       </div>
     </div>
+  );
+}
+
+const Index = () => {
+  return (
+    <KubernetesConnectionProvider>
+      <IndexContent />
+    </KubernetesConnectionProvider>
   );
 };
 

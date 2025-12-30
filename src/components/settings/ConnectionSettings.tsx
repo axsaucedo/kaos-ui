@@ -9,16 +9,16 @@ import { Loader2, CheckCircle, XCircle, RefreshCw, Wifi, WifiOff } from 'lucide-
 import { k8sClient } from '@/lib/kubernetes-client';
 import { useToast } from '@/hooks/use-toast';
 import { ConnectionDiagnostics } from './ConnectionDiagnostics';
+import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 
 export function ConnectionSettings() {
   const { toast } = useToast();
+  const k8sConnection = useKubernetesConnection();
+  
   const [baseUrl, setBaseUrl] = useState('');
   const [namespace, setNamespace] = useState('default');
   const [namespaces, setNamespaces] = useState<string[]>([]);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'error'>('disconnected');
   const [version, setVersion] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // Load saved config on mount
   useEffect(() => {
@@ -28,12 +28,19 @@ export function ConnectionSettings() {
         const config = JSON.parse(savedConfig);
         setBaseUrl(config.baseUrl || '');
         setNamespace(config.namespace || 'default');
-        k8sClient.setConfig(config);
       } catch (e) {
         console.error('Failed to parse saved config:', e);
       }
     }
   }, []);
+
+  // Sync connection state
+  useEffect(() => {
+    if (k8sConnection.connected) {
+      setBaseUrl(k8sConnection.baseUrl);
+      setNamespace(k8sConnection.namespace);
+    }
+  }, [k8sConnection.connected, k8sConnection.baseUrl, k8sConnection.namespace]);
 
   const handleConnect = async () => {
     if (!baseUrl) {
@@ -45,23 +52,18 @@ export function ConnectionSettings() {
       return;
     }
 
-    setIsConnecting(true);
-    setConnectionStatus('disconnected');
-    setErrorMessage(null);
-
-    // Clean URL - remove trailing slash
     const cleanUrl = baseUrl.replace(/\/$/, '');
-    
-    k8sClient.setConfig({ baseUrl: cleanUrl, namespace });
+    const success = await k8sConnection.connect(cleanUrl, namespace);
 
-    const result = await k8sClient.testConnection();
-
-    if (result.success) {
-      setConnectionStatus('connected');
-      setVersion(result.version || null);
-      
+    if (success) {
       // Save config
       localStorage.setItem('k8s-config', JSON.stringify({ baseUrl: cleanUrl, namespace }));
+      
+      // Get version
+      const result = await k8sClient.testConnection();
+      if (result.version) {
+        setVersion(result.version);
+      }
       
       // Fetch namespaces
       try {
@@ -73,25 +75,20 @@ export function ConnectionSettings() {
       
       toast({
         title: 'Connected',
-        description: `Connected to Kubernetes ${result.version}`,
+        description: `Connected to Kubernetes ${result.version || ''}`,
       });
     } else {
-      setConnectionStatus('error');
-      setErrorMessage(result.error || 'Connection failed');
       toast({
         title: 'Connection Failed',
-        description: result.error,
+        description: k8sConnection.error || 'Unable to connect',
         variant: 'destructive',
       });
     }
-
-    setIsConnecting(false);
   };
 
   const handleDisconnect = () => {
-    k8sClient.setConfig({ baseUrl: '', namespace: 'default' });
+    k8sConnection.disconnect();
     localStorage.removeItem('k8s-config');
-    setConnectionStatus('disconnected');
     setVersion(null);
     setNamespaces([]);
     toast({
@@ -100,15 +97,30 @@ export function ConnectionSettings() {
     });
   };
 
-  const handleNamespaceChange = (value: string) => {
+  const handleNamespaceChange = async (value: string) => {
     setNamespace(value);
-    k8sClient.setConfig({ namespace: value });
-    const savedConfig = localStorage.getItem('k8s-config');
-    if (savedConfig) {
-      const config = JSON.parse(savedConfig);
-      localStorage.setItem('k8s-config', JSON.stringify({ ...config, namespace: value }));
+    // Reconnect with new namespace
+    if (k8sConnection.connected && baseUrl) {
+      await k8sConnection.connect(baseUrl, value);
+      localStorage.setItem('k8s-config', JSON.stringify({ baseUrl, namespace: value }));
     }
   };
+
+  const handleRefresh = async () => {
+    await k8sConnection.refreshAll();
+    toast({
+      title: 'Refreshed',
+      description: 'Resources synced from cluster',
+    });
+  };
+
+  const connectionStatus = k8sConnection.connecting 
+    ? 'connecting' 
+    : k8sConnection.connected 
+      ? 'connected' 
+      : k8sConnection.error 
+        ? 'error' 
+        : 'disconnected';
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -136,6 +148,12 @@ export function ConnectionSettings() {
                 Connected {version && `(${version})`}
               </Badge>
             )}
+            {connectionStatus === 'connecting' && (
+              <Badge variant="secondary">
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                Connecting...
+              </Badge>
+            )}
             {connectionStatus === 'error' && (
               <Badge variant="destructive">
                 <XCircle className="h-3 w-3 mr-1" />
@@ -147,9 +165,16 @@ export function ConnectionSettings() {
             )}
           </div>
 
-          {errorMessage && (
+          {k8sConnection.error && (
             <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-              {errorMessage}
+              {k8sConnection.error}
+            </div>
+          )}
+
+          {/* Last refresh */}
+          {k8sConnection.lastRefresh && (
+            <div className="text-xs text-muted-foreground">
+              Last synced: {k8sConnection.lastRefresh.toLocaleTimeString()}
             </div>
           )}
 
@@ -198,8 +223,8 @@ export function ConnectionSettings() {
           {/* Action Buttons */}
           <div className="flex gap-2">
             {connectionStatus !== 'connected' ? (
-              <Button onClick={handleConnect} disabled={isConnecting}>
-                {isConnecting ? (
+              <Button onClick={handleConnect} disabled={k8sConnection.connecting}>
+                {k8sConnection.connecting ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     Connecting...
@@ -210,6 +235,10 @@ export function ConnectionSettings() {
               </Button>
             ) : (
               <>
+                <Button variant="outline" onClick={handleRefresh}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
                 <Button variant="outline" onClick={handleConnect}>
                   <RefreshCw className="h-4 w-4 mr-2" />
                   Reconnect
