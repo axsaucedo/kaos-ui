@@ -108,20 +108,21 @@ export function CRUDTestPanel() {
     }
 
     // Read
+    let latestResource: ModelAPI | null = null;
     const readPassed = await runTest(suiteName, 'Read ModelAPI', async () => {
-      const fetched = await k8sClient.getModelAPI(testName);
-      if (fetched.metadata.name !== testName) {
+      latestResource = await k8sClient.getModelAPI(testName);
+      if (latestResource.metadata.name !== testName) {
         throw new Error('Fetched name does not match');
       }
     });
 
-    // Update
+    // Update (use latestResource from read to get current resourceVersion)
     const updatePassed = await runTest(suiteName, 'Update ModelAPI', async () => {
-      if (!createdResource) throw new Error('No resource to update');
+      if (!latestResource) throw new Error('No resource to update');
       const updated: ModelAPI = {
-        ...createdResource,
+        ...latestResource,
         spec: {
-          ...createdResource.spec,
+          ...latestResource.spec,
           proxyConfig: {
             env: [
               { name: 'TEST_KEY', value: 'updated-value' },
@@ -193,20 +194,21 @@ export function CRUDTestPanel() {
     }
 
     // Read
+    let latestResource: MCPServer | null = null;
     const readPassed = await runTest(suiteName, 'Read MCPServer', async () => {
-      const fetched = await k8sClient.getMCPServer(testName);
-      if (fetched.metadata.name !== testName) {
+      latestResource = await k8sClient.getMCPServer(testName);
+      if (latestResource.metadata.name !== testName) {
         throw new Error('Fetched name does not match');
       }
     });
 
-    // Update
+    // Update (use latestResource from read to get current resourceVersion)
     const updatePassed = await runTest(suiteName, 'Update MCPServer', async () => {
-      if (!createdResource) throw new Error('No resource to update');
+      if (!latestResource) throw new Error('No resource to update');
       const updated: MCPServer = {
-        ...createdResource,
+        ...latestResource,
         spec: {
-          ...createdResource.spec,
+          ...latestResource.spec,
           config: {
             mcp: 'updated-mcp-server',
             env: [{ name: 'TEST_VAR', value: 'updated' }]
@@ -279,22 +281,23 @@ export function CRUDTestPanel() {
     }
 
     // Read
+    let latestResource: Agent | null = null;
     const readPassed = await runTest(suiteName, 'Read Agent', async () => {
-      const fetched = await k8sClient.getAgent(testName);
-      if (fetched.metadata.name !== testName) {
+      latestResource = await k8sClient.getAgent(testName);
+      if (latestResource.metadata.name !== testName) {
         throw new Error('Fetched name does not match');
       }
     });
 
-    // Update
+    // Update (use latestResource from read to get current resourceVersion)
     const updatePassed = await runTest(suiteName, 'Update Agent', async () => {
-      if (!createdResource) throw new Error('No resource to update');
+      if (!latestResource) throw new Error('No resource to update');
       const updated: Agent = {
-        ...createdResource,
+        ...latestResource,
         spec: {
-          ...createdResource.spec,
+          ...latestResource.spec,
           config: {
-            ...createdResource.spec.config,
+            ...latestResource.spec.config,
             description: 'Updated test agent description'
           }
         }
