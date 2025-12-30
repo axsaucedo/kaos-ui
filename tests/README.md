@@ -1,62 +1,82 @@
-# Puppeteer Integration Tests
+# Integration and E2E Tests
 
-This directory contains comprehensive Puppeteer-based integration tests for the Kubernetes Agentic Dashboard.
+This directory contains comprehensive tests for the Kubernetes Agentic Dashboard.
 
 ## Test Structure
 
 ```
 tests/
 ├── helpers/
-│   └── setup.ts          # Test utilities and browser setup
+│   └── setup.ts              # Test utilities and browser setup
 ├── ui/
-│   ├── dashboard.test.ts # Dashboard smoke tests
-│   ├── navigation.test.ts # Tab navigation tests
-│   ├── resources.test.ts  # Resource list tests
-│   ├── canvas.test.ts     # Visual canvas tests
-│   └── logs.test.ts       # Logs viewer tests
+│   ├── dashboard.test.ts     # Dashboard smoke tests
+│   ├── navigation.test.ts    # Tab navigation tests
+│   ├── resources.test.ts     # Resource list tests
+│   ├── canvas.test.ts        # Visual canvas tests
+│   ├── resource-sync.test.ts # Resource sync tests
+│   └── logs.test.ts          # Logs viewer tests
 ├── e2e/
-│   └── workflows.test.ts  # End-to-end workflow tests
-└── screenshots/           # Test failure screenshots
+│   ├── workflows.test.ts     # End-to-end workflow tests
+│   └── crd-operations.test.ts # CRUD operations against live cluster
+├── integration/
+│   ├── kubernetes-api.test.ts # Kubernetes API tests
+│   └── validate-crds.test.ts  # CRD validation tests
+└── screenshots/              # Test failure screenshots
 ```
 
-## Test Categories
+## Running Tests Against a Live Kubernetes Cluster
 
-### 1. Dashboard Smoke Tests (`ui/dashboard.test.ts`)
-- Initial page load validation
-- Sidebar, header, and main content verification
-- Resource stat cards display
-- System health indicators
+### Prerequisites
 
-### 2. Navigation Tests (`ui/navigation.test.ts`)
-- All tab navigation works correctly
-- Tab content renders appropriately
-- Navigation back to Overview works
+1. **Start kubectl proxy:**
+   ```bash
+   kubectl proxy --port=8001
+   ```
 
-### 3. Resource List Tests (`ui/resources.test.ts`)
-- Model APIs list with mock data
-- MCP Servers list with tools display
-- Agents list with connections
-- Kubernetes resources (Pods, Deployments, Volumes)
+2. **Start ngrok tunnel (for browser access):**
+   ```bash
+   ngrok http 8001
+   ```
 
-### 4. Visual Canvas Tests (`ui/canvas.test.ts`)
-- React Flow canvas renders
-- Resource palette with drag items
-- Nodes display with correct data
-- Canvas controls (minimap, zoom, etc.)
+3. **Ensure CRDs are installed:**
+   ```bash
+   kubectl get crd modelapis.ethical.institute
+   kubectl get crd mcpservers.ethical.institute
+   kubectl get crd agents.ethical.institute
+   ```
 
-### 5. Logs Viewer Tests (`ui/logs.test.ts`)
-- Log entries display
-- Search and filter functionality
-- Level filtering
+### Running CRUD Tests
 
-### 6. End-to-End Workflow Tests (`e2e/workflows.test.ts`)
-- Complete navigation workflows
-- Kubernetes resources browsing
-- Tools access workflow
-- Sidebar collapse functionality
-- Full application health check
+```bash
+# Set environment variables and run
+K8S_BASE_URL=https://your-ngrok-url.ngrok-free.app K8S_NAMESPACE=test npx vitest run tests/e2e/crd-operations.test.ts
 
-## Running Tests
+# Or for integration validation tests
+K8S_BASE_URL=https://your-ngrok-url.ngrok-free.app K8S_NAMESPACE=test npx vitest run tests/integration/validate-crds.test.ts
+```
+
+### What the CRUD Tests Do
+
+1. **Connect to the cluster** via the ngrok URL
+2. **List existing resources** (ModelAPIs, MCPServers, Agents)
+3. **Create test resources** with `e2e-test-` prefix
+4. **Verify creation** by fetching them back
+5. **Update resources** and verify changes
+6. **Delete test resources** and verify removal
+7. **Cleanup** any leftover test resources
+
+### Verifying Results
+
+After running tests, verify with kubectl:
+```bash
+kubectl get modelapi -n test
+kubectl get mcpserver -n test
+kubectl get agent -n test
+```
+
+## UI Tests
+
+### Running UI Tests
 
 ```bash
 # Start the development server first
@@ -72,28 +92,40 @@ npm run test -- tests/ui/dashboard.test.ts
 npm run test -- --reporter=verbose
 ```
 
-## Test Configuration
+## Test Categories
 
-Tests are configured in `vitest.config.ts` with:
-- 60 second test timeout
-- 30 second hook timeout
-- Node environment for Puppeteer
-- Path aliases matching the main app
+### 1. CRD Operations Tests (`e2e/crd-operations.test.ts`)
+- Creates ModelAPI, MCPServer, Agent resources
+- Tests update operations
+- Tests delete operations
+- Validates resource counts match kubectl
 
-## Mock Data
+### 2. CRD Validation Tests (`integration/validate-crds.test.ts`)
+- Validates correct API group (ethical.institute)
+- Tests exact YAML structure from user examples
+- Full CRUD cycle with cleanup
 
-Tests use the mock data defined in `src/stores/kubernetesStore.ts`:
-- 2 ModelAPIs (openai-proxy, llama-hosted)
-- 3 MCPServers (websearch-mcp, filesystem-mcp, code-executor)
-- 3 Agents (orchestrator-agent, coder-agent, reviewer-agent)
-- 3 Pods
-- 2 Deployments
-- 1 PVC
+### 3. Dashboard Smoke Tests (`ui/dashboard.test.ts`)
+- Initial page load validation
+- Sidebar, header, and main content verification
+- Resource stat cards display
+
+### 4. Navigation Tests (`ui/navigation.test.ts`)
+- All tab navigation works correctly
+- Tab content renders appropriately
+
+### 5. Resource List Tests (`ui/resources.test.ts`)
+- Model APIs list display
+- MCP Servers list with tools
+- Agents list with connections
+
+### 6. Visual Canvas Tests (`ui/canvas.test.ts`)
+- React Flow canvas renders
+- Nodes display with correct data
 
 ## Adding New Tests
 
 1. Create a new test file in the appropriate directory
 2. Import helpers from `../helpers/setup`
-3. Use `setupBrowser()` and `teardownBrowser()` for lifecycle
-4. Navigate using `navigateTo(page, path)`
-5. Use helper functions for common operations
+3. Use environment variables for cluster connection
+4. Clean up any test resources after tests complete

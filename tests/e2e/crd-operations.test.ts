@@ -273,9 +273,9 @@ describe('Kubernetes CRD E2E Tests', () => {
           namespace: NAMESPACE,
         },
         spec: {
-          type: 'python-custom',
+          type: 'python-runtime',
           config: {
-            mcp: 'test-mcp',
+            mcp: 'mcp-server-test',
             env: [],
           },
         },
@@ -287,7 +287,7 @@ describe('Kubernetes CRD E2E Tests', () => {
       });
 
       expect(created.metadata.name).toBe(testMCPServerName);
-      expect(created.spec.type).toBe('python-custom');
+      expect(created.spec.type).toBe('python-runtime');
       console.log(`Created MCPServer: ${created.metadata.name}`);
     });
 
