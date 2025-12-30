@@ -1,0 +1,254 @@
+import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2, CheckCircle, XCircle, RefreshCw, Wifi, WifiOff } from 'lucide-react';
+import { k8sClient } from '@/lib/kubernetes-client';
+import { useToast } from '@/hooks/use-toast';
+
+export function ConnectionSettings() {
+  const { toast } = useToast();
+  const [baseUrl, setBaseUrl] = useState('');
+  const [namespace, setNamespace] = useState('default');
+  const [namespaces, setNamespaces] = useState<string[]>([]);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connected' | 'error'>('disconnected');
+  const [version, setVersion] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Load saved config on mount
+  useEffect(() => {
+    const savedConfig = localStorage.getItem('k8s-config');
+    if (savedConfig) {
+      try {
+        const config = JSON.parse(savedConfig);
+        setBaseUrl(config.baseUrl || '');
+        setNamespace(config.namespace || 'default');
+        k8sClient.setConfig(config);
+      } catch (e) {
+        console.error('Failed to parse saved config:', e);
+      }
+    }
+  }, []);
+
+  const handleConnect = async () => {
+    if (!baseUrl) {
+      toast({
+        title: 'Error',
+        description: 'Please enter a Kubernetes API URL',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setIsConnecting(true);
+    setConnectionStatus('disconnected');
+    setErrorMessage(null);
+
+    // Clean URL - remove trailing slash
+    const cleanUrl = baseUrl.replace(/\/$/, '');
+    
+    k8sClient.setConfig({ baseUrl: cleanUrl, namespace });
+
+    const result = await k8sClient.testConnection();
+
+    if (result.success) {
+      setConnectionStatus('connected');
+      setVersion(result.version || null);
+      
+      // Save config
+      localStorage.setItem('k8s-config', JSON.stringify({ baseUrl: cleanUrl, namespace }));
+      
+      // Fetch namespaces
+      try {
+        const nsList = await k8sClient.listNamespaces();
+        setNamespaces(nsList.map(ns => ns.metadata.name));
+      } catch (e) {
+        console.warn('Could not fetch namespaces:', e);
+      }
+      
+      toast({
+        title: 'Connected',
+        description: `Connected to Kubernetes ${result.version}`,
+      });
+    } else {
+      setConnectionStatus('error');
+      setErrorMessage(result.error || 'Connection failed');
+      toast({
+        title: 'Connection Failed',
+        description: result.error,
+        variant: 'destructive',
+      });
+    }
+
+    setIsConnecting(false);
+  };
+
+  const handleDisconnect = () => {
+    k8sClient.setConfig({ baseUrl: '', namespace: 'default' });
+    localStorage.removeItem('k8s-config');
+    setConnectionStatus('disconnected');
+    setVersion(null);
+    setNamespaces([]);
+    toast({
+      title: 'Disconnected',
+      description: 'Disconnected from Kubernetes cluster',
+    });
+  };
+
+  const handleNamespaceChange = (value: string) => {
+    setNamespace(value);
+    k8sClient.setConfig({ namespace: value });
+    const savedConfig = localStorage.getItem('k8s-config');
+    if (savedConfig) {
+      const config = JSON.parse(savedConfig);
+      localStorage.setItem('k8s-config', JSON.stringify({ ...config, namespace: value }));
+    }
+  };
+
+  return (
+    <div className="space-y-6 max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            {connectionStatus === 'connected' ? (
+              <Wifi className="h-5 w-5 text-green-500" />
+            ) : (
+              <WifiOff className="h-5 w-5 text-muted-foreground" />
+            )}
+            Kubernetes Connection
+          </CardTitle>
+          <CardDescription>
+            Connect to your Kubernetes cluster via kubectl proxy + ngrok tunnel
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Status Badge */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Status:</span>
+            {connectionStatus === 'connected' && (
+              <Badge variant="default" className="bg-green-600">
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Connected {version && `(${version})`}
+              </Badge>
+            )}
+            {connectionStatus === 'error' && (
+              <Badge variant="destructive">
+                <XCircle className="h-3 w-3 mr-1" />
+                Error
+              </Badge>
+            )}
+            {connectionStatus === 'disconnected' && (
+              <Badge variant="secondary">Disconnected</Badge>
+            )}
+          </div>
+
+          {errorMessage && (
+            <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+              {errorMessage}
+            </div>
+          )}
+
+          {/* API URL Input */}
+          <div className="space-y-2">
+            <Label htmlFor="baseUrl">Kubernetes API URL (ngrok)</Label>
+            <Input
+              id="baseUrl"
+              placeholder="https://xxxx.ngrok-free.app"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              disabled={connectionStatus === 'connected'}
+            />
+            <p className="text-xs text-muted-foreground">
+              Run <code className="bg-muted px-1 py-0.5 rounded">kubectl proxy --port=8001</code> then{' '}
+              <code className="bg-muted px-1 py-0.5 rounded">ngrok http 8001</code>
+            </p>
+          </div>
+
+          {/* Namespace Selector */}
+          <div className="space-y-2">
+            <Label htmlFor="namespace">Namespace</Label>
+            {namespaces.length > 0 ? (
+              <Select value={namespace} onValueChange={handleNamespaceChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select namespace" />
+                </SelectTrigger>
+                <SelectContent>
+                  {namespaces.map((ns) => (
+                    <SelectItem key={ns} value={ns}>
+                      {ns}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                id="namespace"
+                placeholder="default"
+                value={namespace}
+                onChange={(e) => setNamespace(e.target.value)}
+              />
+            )}
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            {connectionStatus !== 'connected' ? (
+              <Button onClick={handleConnect} disabled={isConnecting}>
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Connecting...
+                  </>
+                ) : (
+                  'Connect'
+                )}
+              </Button>
+            ) : (
+              <>
+                <Button variant="outline" onClick={handleConnect}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reconnect
+                </Button>
+                <Button variant="destructive" onClick={handleDisconnect}>
+                  Disconnect
+                </Button>
+              </>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Instructions Card */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Setup Instructions</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <h4 className="font-medium">1. Start kubectl proxy</h4>
+            <pre className="bg-muted p-3 rounded-md text-sm overflow-x-auto">
+              kubectl proxy --port=8001
+            </pre>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-medium">2. Start ngrok tunnel</h4>
+            <pre className="bg-muted p-3 rounded-md text-sm overflow-x-auto">
+              ngrok http 8001
+            </pre>
+          </div>
+          <div className="space-y-2">
+            <h4 className="font-medium">3. Copy the ngrok URL</h4>
+            <p className="text-sm text-muted-foreground">
+              Copy the <code className="bg-muted px-1 py-0.5 rounded">https://xxxx.ngrok-free.app</code> URL 
+              from ngrok and paste it above.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

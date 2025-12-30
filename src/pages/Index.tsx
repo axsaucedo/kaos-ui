@@ -9,6 +9,7 @@ import { AgentList } from '@/components/resources/AgentList';
 import { PodsList } from '@/components/kubernetes/PodsList';
 import { DeploymentsList } from '@/components/kubernetes/DeploymentsList';
 import { VolumesList } from '@/components/kubernetes/VolumesList';
+import { ConnectionSettings } from '@/components/settings/ConnectionSettings';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { Settings, AlertCircle, Search, Download, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -98,7 +99,18 @@ const Index = () => {
         );
       case 'settings':
         return (
-          <div className="p-6"><div className="flex items-center gap-4 mb-6"><div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center"><Settings className="h-6 w-6 text-muted-foreground" /></div><div><h1 className="text-2xl font-bold text-foreground">Settings</h1><p className="text-muted-foreground">Configure your operator dashboard</p></div></div><div className="text-center py-12 text-muted-foreground">Settings panel coming soon</div></div>
+          <div className="p-6">
+            <div className="flex items-center gap-4 mb-6">
+              <div className="h-12 w-12 rounded-xl bg-muted flex items-center justify-center">
+                <Settings className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+                <p className="text-muted-foreground">Configure your operator dashboard</p>
+              </div>
+            </div>
+            <ConnectionSettings />
+          </div>
         );
       default: return <OverviewDashboard />;
     }
