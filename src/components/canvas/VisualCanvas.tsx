@@ -29,7 +29,7 @@ import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import type { ModelAPI, MCPServer, Agent } from '@/types/kubernetes';
+import type { ModelAPI, MCPServer, Agent, MCPServerType } from '@/types/kubernetes';
 
 // Custom Node Components
 interface NodeData {
@@ -278,7 +278,7 @@ function ConfigPanel({ node, onClose, onUpdate, onDelete, modelAPIs, mcpServers 
             onValueChange={(type) => {
               const updatedResource = {
                 ...server,
-                spec: { ...server.spec, type },
+                spec: { ...server.spec, type: type as MCPServerType },
               };
               onUpdate(node.id, { resource: updatedResource, mcpType: type });
             }}
