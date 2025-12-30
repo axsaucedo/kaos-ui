@@ -12,12 +12,28 @@ const badgeVariants = cva(
         secondary: "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
         destructive: "border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80",
         outline: "text-foreground",
+        // Status variants
+        success: "border-transparent bg-success/20 text-success",
+        warning: "border-transparent bg-warning/20 text-warning",
+        error: "border-transparent bg-destructive/20 text-destructive",
+        // Resource type badges
+        modelapi: "border-transparent bg-modelapi/20 text-modelapi",
+        mcpserver: "border-transparent bg-mcpserver/20 text-mcpserver",
+        agent: "border-transparent bg-agent/20 text-agent",
+        pod: "border-transparent bg-pod/20 text-pod",
+        deployment: "border-transparent bg-deployment/20 text-deployment",
+        volume: "border-transparent bg-volume/20 text-volume",
+        // Status badges
+        running: "border-transparent bg-success/20 text-success",
+        pending: "border-transparent bg-warning/20 text-warning",
+        terminated: "border-transparent bg-muted text-muted-foreground",
+        unknown: "border-transparent bg-muted text-muted-foreground",
       },
     },
     defaultVariants: {
       variant: "default",
     },
-  },
+  }
 );
 
 export interface BadgeProps extends React.HTMLAttributes<HTMLDivElement>, VariantProps<typeof badgeVariants> {}
