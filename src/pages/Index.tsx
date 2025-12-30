@@ -8,6 +8,10 @@ import { MCPServerList } from '@/components/resources/MCPServerList';
 import { AgentList } from '@/components/resources/AgentList';
 import { AgentDetailDrawer } from '@/components/resources/AgentDetailDrawer';
 import { AgentEditDialog } from '@/components/resources/AgentEditDialog';
+import { ModelAPIDetailDrawer } from '@/components/resources/ModelAPIDetailDrawer';
+import { ModelAPIEditDialog } from '@/components/resources/ModelAPIEditDialog';
+import { MCPServerDetailDrawer } from '@/components/resources/MCPServerDetailDrawer';
+import { MCPServerEditDialog } from '@/components/resources/MCPServerEditDialog';
 import { PodsList } from '@/components/kubernetes/PodsList';
 import { DeploymentsList } from '@/components/kubernetes/DeploymentsList';
 import { VolumesList } from '@/components/kubernetes/VolumesList';
@@ -21,7 +25,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import type { Agent } from '@/types/kubernetes';
+import type { Agent, ModelAPI, MCPServer } from '@/types/kubernetes';
 
 // Inline LogsViewer to avoid import issues
 function LogsViewer() {
@@ -130,6 +134,8 @@ function IndexContent() {
   };
 
   const isAgentSelected = selectedResource?.kind === 'Agent';
+  const isModelAPISelected = selectedResource?.kind === 'ModelAPI';
+  const isMCPServerSelected = selectedResource?.kind === 'MCPServer';
 
   return (
     <div className="flex h-screen w-full bg-background overflow-hidden">
@@ -138,6 +144,44 @@ function IndexContent() {
         <Header />
         <main className="flex-1 overflow-auto">{renderContent()}</main>
       </div>
+
+      {/* ModelAPI Detail Drawer */}
+      {isModelAPISelected && selectedResourceMode === 'view' && (
+        <ModelAPIDetailDrawer
+          modelAPI={selectedResource as ModelAPI}
+          open={true}
+          onClose={handleCloseResource}
+          onEdit={handleSwitchToEdit}
+        />
+      )}
+
+      {/* ModelAPI Edit Dialog */}
+      {isModelAPISelected && selectedResourceMode === 'edit' && (
+        <ModelAPIEditDialog
+          modelAPI={selectedResource as ModelAPI}
+          open={true}
+          onClose={handleCloseResource}
+        />
+      )}
+
+      {/* MCPServer Detail Drawer */}
+      {isMCPServerSelected && selectedResourceMode === 'view' && (
+        <MCPServerDetailDrawer
+          mcpServer={selectedResource as MCPServer}
+          open={true}
+          onClose={handleCloseResource}
+          onEdit={handleSwitchToEdit}
+        />
+      )}
+
+      {/* MCPServer Edit Dialog */}
+      {isMCPServerSelected && selectedResourceMode === 'edit' && (
+        <MCPServerEditDialog
+          mcpServer={selectedResource as MCPServer}
+          open={true}
+          onClose={handleCloseResource}
+        />
+      )}
 
       {/* Agent Detail Drawer */}
       {isAgentSelected && selectedResourceMode === 'view' && (
