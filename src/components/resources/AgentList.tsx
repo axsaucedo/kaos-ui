@@ -2,11 +2,13 @@ import React from 'react';
 import { Bot, Link2 } from 'lucide-react';
 import { ResourceList } from '@/components/resources/ResourceList';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
+import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { Badge } from '@/components/ui/badge';
 import type { Agent } from '@/types/kubernetes';
 
 export function AgentList() {
-  const { agents, deleteAgent, setSelectedResource, setActiveTab } = useKubernetesStore();
+  const { agents, setSelectedResource, setSelectedResourceMode, setActiveTab } = useKubernetesStore();
+  const { deleteAgent } = useKubernetesConnection();
 
   const columns = [
     {
@@ -81,9 +83,17 @@ export function AgentList() {
       icon={Bot}
       iconColor="agent-color"
       onAdd={() => setActiveTab('visual-editor')}
-      onView={(item) => setSelectedResource(item)}
-      onEdit={(item) => setSelectedResource(item)}
-      onDelete={(item) => deleteAgent(item.metadata.name)}
+      onView={(item) => {
+        setSelectedResource(item);
+        setSelectedResourceMode('view');
+      }}
+      onEdit={(item) => {
+        setSelectedResource(item);
+        setSelectedResourceMode('edit');
+      }}
+      onDelete={async (item) => {
+        await deleteAgent(item.metadata.name, item.metadata.namespace);
+      }}
       getStatus={(item) => item.status?.phase || 'Unknown'}
       getItemId={(item) => item.metadata.name}
     />

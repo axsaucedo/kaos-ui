@@ -37,6 +37,7 @@ interface KubernetesState {
   
   // UI State
   selectedResource: any | null;
+  selectedResourceMode: 'view' | 'edit' | null;
   activeTab: string;
   
   // Actions
@@ -80,6 +81,7 @@ interface KubernetesState {
   setCanvasPan: (pan: { x: number; y: number }) => void;
   
   setSelectedResource: (resource: any | null) => void;
+  setSelectedResourceMode: (mode: 'view' | 'edit' | null) => void;
   setActiveTab: (tab: string) => void;
 }
 
@@ -103,6 +105,7 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   canvasPan: { x: 0, y: 0 },
   
   selectedResource: null,
+  selectedResourceMode: null,
   activeTab: 'overview',
   
   // ModelAPI actions
@@ -171,5 +174,6 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   setCanvasPan: (pan) => set({ canvasPan: pan }),
   
   setSelectedResource: (resource) => set({ selectedResource: resource }),
+  setSelectedResourceMode: (mode) => set({ selectedResourceMode: mode }),
   setActiveTab: (tab) => set({ activeTab: tab }),
 }));
