@@ -1,5 +1,5 @@
 import React from 'react';
-import { RefreshCw, ChevronDown, Clock } from 'lucide-react';
+import { RefreshCw, ChevronDown, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -22,18 +22,48 @@ const REFRESH_INTERVALS = [
 ];
 
 export function AutoRefreshControl() {
-  const { autoRefreshEnabled, autoRefreshInterval, isRefreshing, setAutoRefreshEnabled, setAutoRefreshInterval } = useKubernetesStore();
-  const { refreshAll, startPolling, stopPolling, lastRefresh, connected } = useKubernetesConnection();
+  const { 
+    autoRefreshEnabled, 
+    autoRefreshInterval, 
+    isRefreshing, 
+    nextRefreshTime,
+    setAutoRefreshEnabled, 
+    setAutoRefreshInterval,
+    setNextRefreshTime
+  } = useKubernetesStore();
+  const { refreshAll, startPolling, stopPolling, connected } = useKubernetesConnection();
+  
+  const [countdown, setCountdown] = React.useState<number | null>(null);
 
   const currentInterval = REFRESH_INTERVALS.find(i => i.value === autoRefreshInterval) || REFRESH_INTERVALS[4]; // default 30s
+
+  // Update countdown every 100ms for smooth display
+  React.useEffect(() => {
+    if (!autoRefreshEnabled || !nextRefreshTime) {
+      setCountdown(null);
+      return;
+    }
+
+    const updateCountdown = () => {
+      const remaining = Math.max(0, nextRefreshTime - Date.now());
+      setCountdown(remaining);
+    };
+
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 100);
+    return () => clearInterval(timer);
+  }, [autoRefreshEnabled, nextRefreshTime]);
 
   const handleIntervalChange = (interval: number) => {
     if (interval === 0) {
       setAutoRefreshEnabled(false);
+      setNextRefreshTime(null);
       stopPolling();
     } else {
       setAutoRefreshEnabled(true);
       setAutoRefreshInterval(interval);
+      // Immediately reset countdown with new interval
+      setNextRefreshTime(Date.now() + interval);
       // Restart polling with new interval
       stopPolling();
       setTimeout(() => startPolling(), 0);
@@ -43,26 +73,24 @@ export function AutoRefreshControl() {
   const handleManualRefresh = async () => {
     if (connected) {
       await refreshAll();
+      // Reset countdown after manual refresh
+      if (autoRefreshEnabled && autoRefreshInterval > 0) {
+        setNextRefreshTime(Date.now() + autoRefreshInterval);
+        stopPolling();
+        setTimeout(() => startPolling(), 0);
+      }
     }
   };
 
-  // Format last refresh time
-  const getLastRefreshText = () => {
-    if (!lastRefresh) return 'Never';
-    const seconds = Math.floor((Date.now() - lastRefresh.getTime()) / 1000);
-    if (seconds < 5) return 'Just now';
-    if (seconds < 60) return `${seconds}s ago`;
-    const minutes = Math.floor(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    return lastRefresh.toLocaleTimeString();
+  // Format countdown for display
+  const formatCountdown = (ms: number) => {
+    if (ms <= 0) return '0.0s';
+    const seconds = ms / 1000;
+    if (seconds < 10) {
+      return `${seconds.toFixed(1)}s`;
+    }
+    return `${Math.round(seconds)}s`;
   };
-
-  // Update relative time display
-  const [, setTick] = React.useState(0);
-  React.useEffect(() => {
-    const timer = setInterval(() => setTick(t => t + 1), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   return (
     <div className="flex items-center gap-1">
@@ -78,11 +106,13 @@ export function AutoRefreshControl() {
         <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
       </Button>
 
-      {/* Last Refresh Time */}
-      <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground px-2">
-        <Clock className="h-3 w-3" />
-        <span>{getLastRefreshText()}</span>
-      </div>
+      {/* Countdown Display */}
+      {autoRefreshEnabled && countdown !== null && (
+        <div className="hidden sm:flex items-center gap-1 text-xs text-muted-foreground px-2 min-w-[60px]">
+          <Timer className="h-3 w-3" />
+          <span className="font-mono tabular-nums">{formatCountdown(countdown)}</span>
+        </div>
+      )}
 
       {/* Interval Selector */}
       <DropdownMenu>
