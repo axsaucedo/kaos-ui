@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Box } from 'lucide-react';
 import { ResourceList } from '@/components/resources/ResourceList';
+import { ModelAPICreateDialog } from '@/components/resources/ModelAPICreateDialog';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
+import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { Badge } from '@/components/ui/badge';
 import type { ModelAPI } from '@/types/kubernetes';
 
 export function ModelAPIList() {
-  const { modelAPIs, deleteModelAPI, setSelectedResource, setActiveTab } = useKubernetesStore();
+  const { modelAPIs, setSelectedResource, setSelectedResourceMode } = useKubernetesStore();
+  const { deleteModelAPI } = useKubernetesConnection();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const columns = [
     {
@@ -55,20 +59,36 @@ export function ModelAPIList() {
     },
   ];
 
+  const handleView = (item: ModelAPI) => {
+    setSelectedResource(item);
+    setSelectedResourceMode('view');
+  };
+
+  const handleEdit = (item: ModelAPI) => {
+    setSelectedResource(item);
+    setSelectedResourceMode('edit');
+  };
+
   return (
-    <ResourceList
-      title="Model APIs"
-      description="Manage LiteLLM proxy and vLLM hosted model endpoints"
-      items={modelAPIs}
-      columns={columns}
-      icon={Box}
-      iconColor="modelapi-color"
-      onAdd={() => setActiveTab('visual-editor')}
-      onView={(item) => setSelectedResource(item)}
-      onEdit={(item) => setSelectedResource(item)}
-      onDelete={(item) => deleteModelAPI(item.metadata.name)}
-      getStatus={(item) => item.status?.phase || 'Unknown'}
-      getItemId={(item) => item.metadata.name}
-    />
+    <>
+      <ResourceList
+        title="Model APIs"
+        description="Manage LiteLLM proxy and vLLM hosted model endpoints"
+        items={modelAPIs}
+        columns={columns}
+        icon={Box}
+        iconColor="modelapi-color"
+        onAdd={() => setCreateDialogOpen(true)}
+        onView={handleView}
+        onEdit={handleEdit}
+        onDelete={(item) => deleteModelAPI(item.metadata.name)}
+        getStatus={(item) => item.status?.phase || 'Unknown'}
+        getItemId={(item) => item.metadata.name}
+      />
+      <ModelAPICreateDialog 
+        open={createDialogOpen} 
+        onClose={() => setCreateDialogOpen(false)} 
+      />
+    </>
   );
 }

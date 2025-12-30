@@ -1,12 +1,16 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Server } from 'lucide-react';
 import { ResourceList } from '@/components/resources/ResourceList';
+import { MCPServerCreateDialog } from '@/components/resources/MCPServerCreateDialog';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
+import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { Badge } from '@/components/ui/badge';
 import type { MCPServer } from '@/types/kubernetes';
 
 export function MCPServerList() {
-  const { mcpServers, deleteMCPServer, setSelectedResource, setActiveTab } = useKubernetesStore();
+  const { mcpServers, setSelectedResource, setSelectedResourceMode } = useKubernetesStore();
+  const { deleteMCPServer } = useKubernetesConnection();
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   const columns = [
     {
@@ -60,20 +64,36 @@ export function MCPServerList() {
     },
   ];
 
+  const handleView = (item: MCPServer) => {
+    setSelectedResource(item);
+    setSelectedResourceMode('view');
+  };
+
+  const handleEdit = (item: MCPServer) => {
+    setSelectedResource(item);
+    setSelectedResourceMode('edit');
+  };
+
   return (
-    <ResourceList
-      title="MCP Servers"
-      description="Model Context Protocol servers for tool integration"
-      items={mcpServers}
-      columns={columns}
-      icon={Server}
-      iconColor="mcpserver-color"
-      onAdd={() => setActiveTab('visual-editor')}
-      onView={(item) => setSelectedResource(item)}
-      onEdit={(item) => setSelectedResource(item)}
-      onDelete={(item) => deleteMCPServer(item.metadata.name)}
-      getStatus={(item) => item.status?.phase || 'Unknown'}
-      getItemId={(item) => item.metadata.name}
-    />
+    <>
+      <ResourceList
+        title="MCP Servers"
+        description="Model Context Protocol servers for tool integration"
+        items={mcpServers}
+        columns={columns}
+        icon={Server}
+        iconColor="mcpserver-color"
+        onAdd={() => setCreateDialogOpen(true)}
+        onView={handleView}
+        onEdit={handleEdit}
+        onDelete={(item) => deleteMCPServer(item.metadata.name)}
+        getStatus={(item) => item.status?.phase || 'Unknown'}
+        getItemId={(item) => item.metadata.name}
+      />
+      <MCPServerCreateDialog 
+        open={createDialogOpen} 
+        onClose={() => setCreateDialogOpen(false)} 
+      />
+    </>
   );
 }
