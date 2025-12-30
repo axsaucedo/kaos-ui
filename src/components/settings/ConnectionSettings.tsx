@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2, CheckCircle, XCircle, RefreshCw, Wifi, WifiOff } from 'lucide-react';
 import { k8sClient } from '@/lib/kubernetes-client';
 import { useToast } from '@/hooks/use-toast';
+import { ConnectionDiagnostics } from './ConnectionDiagnostics';
 
 export function ConnectionSettings() {
   const { toast } = useToast();
@@ -222,6 +223,9 @@ export function ConnectionSettings() {
         </CardContent>
       </Card>
 
+      {/* Diagnostics Card */}
+      <ConnectionDiagnostics />
+
       {/* Instructions Card */}
       <Card>
         <CardHeader>
@@ -245,6 +249,13 @@ export function ConnectionSettings() {
             <p className="text-sm text-muted-foreground">
               Copy the <code className="bg-muted px-1 py-0.5 rounded">https://xxxx.ngrok-free.app</code> URL 
               from ngrok and paste it above.
+            </p>
+          </div>
+          <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 mt-4">
+            <h4 className="font-medium text-amber-600 mb-2">⚠️ CORS Limitation</h4>
+            <p className="text-sm text-muted-foreground">
+              <code>kubectl proxy</code> doesn't handle CORS preflight requests, so direct browser 
+              connections will fail. To fix this, enable Lovable Cloud and use an edge function proxy.
             </p>
           </div>
         </CardContent>
