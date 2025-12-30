@@ -1,20 +1,14 @@
 import React from 'react';
-import { Bell, Search, User, Moon, Sun, Settings, RefreshCw } from 'lucide-react';
+import { Bell, Search, User, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
+import { AutoRefreshControl } from './AutoRefreshControl';
+import { ConnectionStatus } from './ConnectionStatus';
 
 export function Header() {
   const { logs } = useKubernetesStore();
   const errorCount = logs.filter(l => l.level === 'error').length;
-  const [isRefreshing, setIsRefreshing] = React.useState(false);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    // Simulate refresh
-    setTimeout(() => setIsRefreshing(false), 1000);
-  };
 
   return (
     <header className="h-14 border-b border-border bg-card/50 backdrop-blur-sm flex items-center justify-between px-4 gap-4">
@@ -29,17 +23,13 @@ export function Header() {
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        {/* Refresh */}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={handleRefresh}
-          className="h-9 w-9 text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-        </Button>
+      {/* Right side controls */}
+      <div className="flex items-center gap-3">
+        {/* Connection Status */}
+        <ConnectionStatus />
+
+        {/* Auto-Refresh Control (Grafana-style) */}
+        <AutoRefreshControl />
 
         {/* Notifications */}
         <Button

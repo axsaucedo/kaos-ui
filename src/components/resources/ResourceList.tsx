@@ -56,13 +56,27 @@ export function ResourceList<T>({
   });
 
   const getStatusVariant = (status: string) => {
-    switch (status) {
-      case 'Running':
+    const normalizedStatus = status?.toLowerCase();
+    switch (normalizedStatus) {
+      case 'running':
+      case 'ready':
+      case 'bound':
+      case 'active':
+      case 'available':
         return 'success';
-      case 'Pending':
+      case 'pending':
+      case 'creating':
+      case 'waiting':
+      case 'progressing':
         return 'warning';
-      case 'Error':
+      case 'error':
+      case 'failed':
+      case 'crashloopbackoff':
         return 'error';
+      case 'terminating':
+      case 'terminated':
+      case 'deleting':
+        return 'destructive';
       default:
         return 'secondary';
     }

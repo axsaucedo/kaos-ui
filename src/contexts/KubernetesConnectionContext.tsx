@@ -23,6 +23,8 @@ interface KubernetesConnectionContextType extends ConnectionState {
   connect: (baseUrl: string, namespace?: string) => Promise<boolean>;
   disconnect: () => void;
   refreshAll: () => Promise<void>;
+  startPolling: () => void;
+  stopPolling: () => void;
   // CRUD operations
   createModelAPI: (api: ModelAPI) => Promise<ModelAPI>;
   updateModelAPI: (api: ModelAPI) => Promise<ModelAPI>;
@@ -36,8 +38,6 @@ interface KubernetesConnectionContextType extends ConnectionState {
 }
 
 const KubernetesConnectionContext = createContext<KubernetesConnectionContextType | null>(null);
-
-const POLL_INTERVAL = 30000; // 30 seconds
 
 export function KubernetesConnectionProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<ConnectionState>({
@@ -75,6 +75,8 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       console.log('[KubernetesConnectionContext] Not configured, skipping refresh');
       return;
     }
+
+    store.setIsRefreshing(true);
 
     try {
       // Fetch all resources in parallel
@@ -119,20 +121,28 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       console.error('[KubernetesConnectionContext] refreshAll error:', error);
       setState(s => ({ ...s, error: message }));
       addLogEntry('error', message, 'connection');
+    } finally {
+      store.setIsRefreshing(false);
     }
   }, [store, addLogEntry]);
 
-  // Start polling
+  // Start polling with interval from store
   const startPolling = useCallback(() => {
     if (pollIntervalRef.current) {
       clearInterval(pollIntervalRef.current);
     }
+    
+    const interval = store.autoRefreshInterval;
+    if (!store.autoRefreshEnabled || interval <= 0) {
+      return;
+    }
+    
     pollIntervalRef.current = setInterval(() => {
       if (k8sClient.isConfigured()) {
         refreshAll();
       }
-    }, POLL_INTERVAL);
-  }, [refreshAll]);
+    }, interval);
+  }, [refreshAll, store.autoRefreshEnabled, store.autoRefreshInterval]);
 
   // Stop polling
   const stopPolling = useCallback(() => {
@@ -307,6 +317,8 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     connect,
     disconnect,
     refreshAll,
+    startPolling,
+    stopPolling,
     createModelAPI,
     updateModelAPI,
     deleteModelAPI,

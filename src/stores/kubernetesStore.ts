@@ -40,6 +40,11 @@ interface KubernetesState {
   selectedResourceMode: 'view' | 'edit' | null;
   activeTab: string;
   
+  // Auto-refresh state
+  autoRefreshEnabled: boolean;
+  autoRefreshInterval: number; // in milliseconds
+  isRefreshing: boolean;
+  
   // Actions
   setModelAPIs: (apis: ModelAPI[]) => void;
   addModelAPI: (api: ModelAPI) => void;
@@ -83,6 +88,11 @@ interface KubernetesState {
   setSelectedResource: (resource: any | null) => void;
   setSelectedResourceMode: (mode: 'view' | 'edit' | null) => void;
   setActiveTab: (tab: string) => void;
+  
+  // Auto-refresh actions
+  setAutoRefreshEnabled: (enabled: boolean) => void;
+  setAutoRefreshInterval: (interval: number) => void;
+  setIsRefreshing: (refreshing: boolean) => void;
 }
 
 // No mock data - all data comes from real Kubernetes API
@@ -107,6 +117,11 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   selectedResource: null,
   selectedResourceMode: null,
   activeTab: 'overview',
+  
+  // Auto-refresh defaults (saved to localStorage)
+  autoRefreshEnabled: JSON.parse(localStorage.getItem('autoRefreshEnabled') || 'true'),
+  autoRefreshInterval: JSON.parse(localStorage.getItem('autoRefreshInterval') || '30000'),
+  isRefreshing: false,
   
   // ModelAPI actions
   setModelAPIs: (apis) => set({ modelAPIs: apis }),
@@ -176,4 +191,15 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   setSelectedResource: (resource) => set({ selectedResource: resource }),
   setSelectedResourceMode: (mode) => set({ selectedResourceMode: mode }),
   setActiveTab: (tab) => set({ activeTab: tab }),
+  
+  // Auto-refresh actions
+  setAutoRefreshEnabled: (enabled) => {
+    localStorage.setItem('autoRefreshEnabled', JSON.stringify(enabled));
+    set({ autoRefreshEnabled: enabled });
+  },
+  setAutoRefreshInterval: (interval) => {
+    localStorage.setItem('autoRefreshInterval', JSON.stringify(interval));
+    set({ autoRefreshInterval: interval });
+  },
+  setIsRefreshing: (refreshing) => set({ isRefreshing: refreshing }),
 }));
