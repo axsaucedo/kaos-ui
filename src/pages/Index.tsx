@@ -206,11 +206,7 @@ function IndexContent() {
 }
 
 const Index = () => {
-  return (
-    <KubernetesConnectionProvider>
-      <IndexContent />
-    </KubernetesConnectionProvider>
-  );
+  return <IndexContent />;
 };
 
 export default Index;

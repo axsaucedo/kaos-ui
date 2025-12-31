@@ -29,8 +29,8 @@ export function useAgentChat(options: UseAgentChatOptions) {
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Determine service name (convention: agent name is the service name)
-  const resolvedServiceName = serviceName || agentName;
+  // Determine service name (convention: agent-<name> is the service name)
+  const resolvedServiceName = serviceName || `agent-${agentName}`;
 
   const generateId = () => `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
@@ -66,6 +66,9 @@ export function useAgentChat(options: UseAgentChatOptions) {
     }));
 
     try {
+      console.log(`[useAgentChat] Sending to service: ${resolvedServiceName} in namespace: ${namespace}`);
+      console.log(`[useAgentChat] Messages:`, apiMessages);
+      
       await k8sClient.streamChatCompletion(
         resolvedServiceName,
         apiMessages,
@@ -74,6 +77,7 @@ export function useAgentChat(options: UseAgentChatOptions) {
           model,
           temperature,
           onChunk: (chunk) => {
+            console.log(`[useAgentChat] Received chunk:`, chunk);
             setMessages(prev => {
               const updated = [...prev];
               const lastMessage = updated[updated.length - 1];
@@ -84,6 +88,7 @@ export function useAgentChat(options: UseAgentChatOptions) {
             });
           },
           onDone: () => {
+            console.log(`[useAgentChat] Stream complete`);
             setMessages(prev => {
               const updated = [...prev];
               const lastMessage = updated[updated.length - 1];
