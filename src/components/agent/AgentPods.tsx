@@ -1,15 +1,22 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import type { Agent, Pod } from '@/types/kubernetes';
-import { Box, CheckCircle, AlertCircle, Clock, RefreshCw, XCircle } from 'lucide-react';
+import { Box, CheckCircle, AlertCircle, Clock, RefreshCw, XCircle, Cpu, Server, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface AgentPodsProps {
   agent: Agent;
+}
+
+interface ResourcePodGroup {
+  resourceType: 'Agent' | 'ModelAPI' | 'MCPServer';
+  resourceName: string;
+  pods: Pod[];
 }
 
 function getPodStatusColor(phase: string): string {
@@ -69,15 +76,94 @@ function getAge(timestamp?: string): string {
   return '<1m';
 }
 
-export function AgentPods({ agent }: AgentPodsProps) {
-  const { pods, deployments, services } = useKubernetesStore();
+function getResourceIcon(type: 'Agent' | 'ModelAPI' | 'MCPServer') {
+  switch (type) {
+    case 'Agent':
+      return <Box className="h-4 w-4 text-agent" />;
+    case 'ModelAPI':
+      return <Cpu className="h-4 w-4 text-modelapi" />;
+    case 'MCPServer':
+      return <Server className="h-4 w-4 text-mcpserver" />;
+  }
+}
 
-  // Filter pods related to this agent
-  const agentPods = pods.filter(pod => {
-    const labels = pod.metadata.labels || {};
-    return labels.agent === agent.metadata.name || 
-           pod.metadata.name.includes(`agent-${agent.metadata.name}`);
+function getResourceBadgeVariant(type: 'Agent' | 'ModelAPI' | 'MCPServer'): 'default' | 'secondary' | 'outline' {
+  return 'secondary';
+}
+
+export function AgentPods({ agent }: AgentPodsProps) {
+  const navigate = useNavigate();
+  const { pods, deployments, services, modelAPIs, mcpServers } = useKubernetesStore();
+
+  // Get the ModelAPI this agent depends on
+  const modelAPIName = agent.spec.modelAPI;
+  const modelAPI = modelAPIs.find(m => m.metadata.name === modelAPIName);
+
+  // Get the MCPServers this agent depends on
+  const mcpServerNames = agent.spec.mcpServers || [];
+  const relatedMCPServers = mcpServers.filter(m => mcpServerNames.includes(m.metadata.name));
+
+  // Helper to find pods for a resource
+  const findPodsForResource = (resourceType: string, resourceName: string): Pod[] => {
+    return pods.filter(pod => {
+      const labels = pod.metadata.labels || {};
+      const name = pod.metadata.name.toLowerCase();
+      const resourceNameLower = resourceName.toLowerCase();
+      
+      // Check labels first
+      if (labels[resourceType.toLowerCase()] === resourceName) return true;
+      
+      // Check naming patterns
+      if (resourceType === 'agent') {
+        return name.includes(`agent-${resourceNameLower}`) || labels.agent === resourceName;
+      } else if (resourceType === 'modelapi') {
+        return name.includes(`modelapi-${resourceNameLower}`) || labels.modelapi === resourceName;
+      } else if (resourceType === 'mcpserver') {
+        return name.includes(`mcpserver-${resourceNameLower}`) || labels.mcpserver === resourceName;
+      }
+      return false;
+    });
+  };
+
+  // Build resource groups
+  const resourceGroups: ResourcePodGroup[] = [];
+
+  // Agent pods
+  const agentPods = findPodsForResource('agent', agent.metadata.name);
+  resourceGroups.push({
+    resourceType: 'Agent',
+    resourceName: agent.metadata.name,
+    pods: agentPods,
   });
+
+  // ModelAPI pods
+  if (modelAPIName) {
+    const modelAPIPods = findPodsForResource('modelapi', modelAPIName);
+    resourceGroups.push({
+      resourceType: 'ModelAPI',
+      resourceName: modelAPIName,
+      pods: modelAPIPods,
+    });
+  }
+
+  // MCPServer pods
+  mcpServerNames.forEach(serverName => {
+    const serverPods = findPodsForResource('mcpserver', serverName);
+    resourceGroups.push({
+      resourceType: 'MCPServer',
+      resourceName: serverName,
+      pods: serverPods,
+    });
+  });
+
+  // Calculate totals
+  const allPods = resourceGroups.flatMap(g => g.pods);
+  const totalPods = allPods.length;
+  const runningPods = allPods.filter(p => p.status?.phase === 'Running').length;
+  const hasIssues = allPods.some(p => 
+    p.status?.phase !== 'Running' || 
+    getRestartCount(p) > 0
+  );
 
   // Find related deployment
   const agentDeployment = deployments.find(d => 
@@ -91,26 +177,40 @@ export function AgentPods({ agent }: AgentPodsProps) {
     s.metadata.labels?.agent === agent.metadata.name
   );
 
-  const hasIssues = agentPods.some(p => 
-    p.status?.phase !== 'Running' || 
-    getRestartCount(p) > 0
-  );
+  const handlePodClick = (pod: Pod) => {
+    navigate(`/pods/${pod.metadata.namespace}/${pod.metadata.name}/logs`);
+  };
 
   return (
     <div className="space-y-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Box className="h-4 w-4 text-agent" />
-              Pods
+              Total Pods
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{agentPods.length}</div>
+            <div className="text-2xl font-bold">{totalPods}</div>
             <p className="text-xs text-muted-foreground">
-              {agentPods.filter(p => p.status?.phase === 'Running').length} running
+              {runningPods} running
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              <Server className="h-4 w-4 text-primary" />
+              Resources
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{resourceGroups.length}</div>
+            <p className="text-xs text-muted-foreground">
+              Agent + {resourceGroups.length - 1} dependencies
             </p>
           </CardContent>
         </Card>
@@ -177,85 +277,102 @@ export function AgentPods({ agent }: AgentPodsProps) {
         </Card>
       )}
 
-      {/* Pods Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">Pod Status</CardTitle>
-          <CardDescription>
-            Detailed status of all pods running this agent
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {agentPods.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">
-                No pods found for this agent
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                The agent may not be deployed or pods are in another namespace
-              </p>
-            </div>
-          ) : (
-            <ScrollArea className="h-[300px]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Ready</TableHead>
-                    <TableHead>Restarts</TableHead>
-                    <TableHead>Age</TableHead>
-                    <TableHead>Host IP</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {agentPods.map((pod) => {
-                    const { ready, total } = getContainerStatus(pod);
-                    const restarts = getRestartCount(pod);
-                    return (
-                      <TableRow key={pod.metadata.uid}>
-                        <TableCell className="font-mono text-xs">
-                          {pod.metadata.name}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            {getPodStatusIcon(pod.status?.phase || 'Unknown')}
+      {/* Pods by Resource */}
+      {resourceGroups.map((group) => (
+        <Card key={`${group.resourceType}-${group.resourceName}`}>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium flex items-center gap-2">
+              {getResourceIcon(group.resourceType)}
+              <span>{group.resourceType}:</span>
+              <span className="font-mono">{group.resourceName}</span>
+              <Badge variant="outline" className="ml-2">
+                {group.pods.length} pod{group.pods.length !== 1 ? 's' : ''}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Click on a pod to view its logs
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {group.pods.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  No pods found for this {group.resourceType.toLowerCase()}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  The resource may not be deployed or pods are in another namespace
+                </p>
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[300px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Ready</TableHead>
+                      <TableHead>Restarts</TableHead>
+                      <TableHead>Age</TableHead>
+                      <TableHead>Host IP</TableHead>
+                      <TableHead className="w-10"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {group.pods.map((pod) => {
+                      const { ready, total } = getContainerStatus(pod);
+                      const restarts = getRestartCount(pod);
+                      return (
+                        <TableRow 
+                          key={pod.metadata.uid} 
+                          className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() => handlePodClick(pod)}
+                        >
+                          <TableCell className="font-mono text-xs">
+                            {pod.metadata.name}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {getPodStatusIcon(pod.status?.phase || 'Unknown')}
+                              <span className={cn(
+                                "text-sm",
+                                getPodStatusColor(pod.status?.phase || 'Unknown')
+                              )}>
+                                {pod.status?.phase || 'Unknown'}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={ready === total && total > 0 ? "success" : "secondary"}>
+                              {ready}/{total}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
                             <span className={cn(
-                              "text-sm",
-                              getPodStatusColor(pod.status?.phase || 'Unknown')
+                              restarts > 0 ? "text-yellow-500" : "text-muted-foreground"
                             )}>
-                              {pod.status?.phase || 'Unknown'}
+                              {restarts}
                             </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={ready === total && total > 0 ? "success" : "secondary"}>
-                            {ready}/{total}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <span className={cn(
-                            restarts > 0 ? "text-yellow-500" : "text-muted-foreground"
-                          )}>
-                            {restarts}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {getAge(pod.metadata.creationTimestamp)}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
-                          {pod.status?.hostIP || '-'}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </ScrollArea>
-          )}
-        </CardContent>
-      </Card>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {getAge(pod.metadata.creationTimestamp)}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {pod.status?.hostIP || '-'}
+                          </TableCell>
+                          <TableCell>
+                            <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
