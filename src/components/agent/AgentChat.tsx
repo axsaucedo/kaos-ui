@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Trash2, StopCircle, AlertCircle, RefreshCw, Hash, Copy, Check } from 'lucide-react';
+import { Send, Trash2, StopCircle, AlertCircle, RefreshCw, Hash, Copy, Check, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -7,50 +7,66 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
 import { ChatMessage } from './ChatMessage';
-import { useAgentChat } from '@/hooks/useAgentChat';
+import { useAgentChat, ChatMessage as ChatMessageType } from '@/hooks/useAgentChat';
 import type { Agent } from '@/types/kubernetes';
 
 interface AgentChatProps {
   agent: Agent;
+  sessionId: string;
+  messages: ChatMessageType[];
+  onSessionChange: (sessionId: string) => void;
+  onMessagesChange: (messages: ChatMessageType[]) => void;
+  onNewSession: () => void;
 }
 
-export function AgentChat({ agent }: AgentChatProps) {
+export function AgentChat({ 
+  agent, 
+  sessionId, 
+  messages: externalMessages, 
+  onSessionChange, 
+  onMessagesChange,
+  onNewSession 
+}: AgentChatProps) {
   const [input, setInput] = useState('');
-  const [sessionId, setSessionId] = useState('');
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
-  // Generate a session ID client-side if one is received from server
+  // Track if session is active (has messages)
+  const hasActiveSession = sessionId !== '' && externalMessages.length > 0;
+
   const handleSessionIdReceived = useCallback((newSessionId: string) => {
     if (newSessionId && !sessionId) {
-      setSessionId(newSessionId);
+      onSessionChange(newSessionId);
       console.log('[AgentChat] Session ID received from server:', newSessionId);
     }
-  }, [sessionId]);
+  }, [sessionId, onSessionChange]);
   
   // Generate a session ID on first message if none exists
-  const currentSessionId = useRef<string>('');
-  
   const getOrCreateSessionId = useCallback(() => {
     if (sessionId) {
-      currentSessionId.current = sessionId;
       return sessionId;
     }
-    if (!currentSessionId.current) {
-      currentSessionId.current = `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-      setSessionId(currentSessionId.current);
-      console.log('[AgentChat] Generated new session ID:', currentSessionId.current);
-    }
-    return currentSessionId.current;
-  }, [sessionId]);
+    const newId = `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    onSessionChange(newId);
+    console.log('[AgentChat] Generated new session ID:', newId);
+    return newId;
+  }, [sessionId, onSessionChange]);
 
-  const { messages, isLoading, error, sendMessage: sendChatMessage, clearMessages, stopGeneration } = useAgentChat({
+  const { messages: hookMessages, isLoading, error, sendMessage: sendChatMessage, clearMessages, stopGeneration } = useAgentChat({
     agentName: agent.metadata.name,
     namespace: agent.metadata.namespace || 'default',
     sessionId: sessionId || undefined,
     onSessionIdReceived: handleSessionIdReceived,
+    initialMessages: externalMessages,
   });
+  
+  // Sync hook messages back to parent
+  useEffect(() => {
+    if (hookMessages !== externalMessages && hookMessages.length > 0) {
+      onMessagesChange(hookMessages);
+    }
+  }, [hookMessages, externalMessages, onMessagesChange]);
   
   const sendMessage = useCallback((content: string) => {
     // Ensure we have a session ID before sending the first message
@@ -66,7 +82,7 @@ export function AgentChat({ agent }: AgentChatProps) {
         scrollContainer.scrollTop = scrollContainer.scrollHeight;
       }
     }
-  }, [messages]);
+  }, [externalMessages]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,10 +107,9 @@ export function AgentChat({ agent }: AgentChatProps) {
     }
   };
 
-  const handleClearAll = () => {
+  const handleNewSession = () => {
     clearMessages();
-    setSessionId('');
-    currentSessionId.current = '';
+    onNewSession();
   };
 
   return (
@@ -110,10 +125,11 @@ export function AgentChat({ agent }: AgentChatProps) {
             <Input
               id="session-id"
               value={sessionId}
-              onChange={(e) => setSessionId(e.target.value)}
-              placeholder="Auto-generated on first message..."
+              onChange={(e) => !hasActiveSession && onSessionChange(e.target.value)}
+              placeholder={hasActiveSession ? "Session active" : "Enter session ID or leave empty to auto-generate..."}
               className="h-7 text-xs font-mono bg-background"
-              disabled={isLoading}
+              disabled={isLoading || hasActiveSession}
+              readOnly={hasActiveSession}
             />
             {sessionId && (
               <Button
@@ -130,6 +146,16 @@ export function AgentChat({ agent }: AgentChatProps) {
                 )}
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewSession}
+              className="h-7 shrink-0 text-xs"
+              disabled={isLoading}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              New Session
+            </Button>
           </div>
         </div>
       </div>
@@ -138,22 +164,12 @@ export function AgentChat({ agent }: AgentChatProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Chat with {agent.metadata.name}</span>
-          {messages.length > 0 && (
+          {externalMessages.length > 0 && (
             <span className="text-xs text-muted-foreground">
-              ({messages.length} messages)
+              ({externalMessages.length} messages)
             </span>
           )}
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleClearAll}
-          disabled={messages.length === 0 && !sessionId}
-          className="text-muted-foreground hover:text-destructive"
-        >
-          <Trash2 className="h-4 w-4 mr-1" />
-          Clear
-        </Button>
       </div>
 
       {/* Error Alert */}
@@ -176,9 +192,9 @@ export function AgentChat({ agent }: AgentChatProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => messages.length > 1 && sendMessage(messages[messages.length - 2]?.content || '')}
+                  onClick={() => externalMessages.length > 1 && sendMessage(externalMessages[externalMessages.length - 2]?.content || '')}
                   className="h-7 text-xs"
-                  disabled={messages.length < 2}
+                  disabled={externalMessages.length < 2}
                 >
                   <RefreshCw className="h-3 w-3 mr-1" />
                   Retry
@@ -191,7 +207,7 @@ export function AgentChat({ agent }: AgentChatProps) {
 
       {/* Messages */}
       <ScrollArea ref={scrollAreaRef} className="flex-1">
-        {messages.length === 0 ? (
+        {externalMessages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-12 px-4 text-center">
             <div className="h-16 w-16 rounded-full bg-agent/10 flex items-center justify-center mb-4">
               <span className="text-3xl">🤖</span>
@@ -206,7 +222,7 @@ export function AgentChat({ agent }: AgentChatProps) {
           </div>
         ) : (
           <div className="divide-y divide-border/50">
-            {messages.map((message) => (
+            {externalMessages.map((message) => (
               <ChatMessage
                 key={message.id}
                 role={message.role}

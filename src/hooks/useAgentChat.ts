@@ -2,7 +2,7 @@
  * Hook for managing chat state and streaming with an Agent
  */
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { k8sClient } from '@/lib/kubernetes-client';
 
 export interface ChatMessage {
@@ -21,15 +21,23 @@ interface UseAgentChatOptions {
   temperature?: number;
   sessionId?: string; // Optional session ID for conversation continuity
   onSessionIdReceived?: (sessionId: string) => void; // Callback when session ID is received from response
+  initialMessages?: ChatMessage[]; // Initial messages to populate the chat
 }
 
 export function useAgentChat(options: UseAgentChatOptions) {
-  const { agentName, namespace, serviceName, model, temperature, sessionId, onSessionIdReceived } = options;
+  const { agentName, namespace, serviceName, model, temperature, sessionId, onSessionIdReceived, initialMessages = [] } = options;
   
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Sync with external messages when they change
+  useEffect(() => {
+    if (initialMessages.length > 0 && messages.length === 0) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages]);
 
   // Determine service name (convention: agent-<name> is the service name)
   const resolvedServiceName = serviceName || `agent-${agentName}`;

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Bot, Edit, Trash2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import { AgentOverview } from '@/components/agent/AgentOverview';
 import { AgentMemory } from '@/components/agent/AgentMemory';
 import { AgentEditDialog } from '@/components/resources/AgentEditDialog';
 import type { Agent } from '@/types/kubernetes';
+import type { ChatMessage } from '@/hooks/useAgentChat';
 
 export default function AgentDetail() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
@@ -34,6 +35,22 @@ export default function AgentDetail() {
   const [agent, setAgent] = useState<Agent | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Chat state lifted here to persist across tab switches
+  const [sessionId, setSessionId] = useState<string>('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const sessionIdRef = useRef<string>('');
+  
+  const handleNewSession = useCallback(() => {
+    setSessionId('');
+    setChatMessages([]);
+    sessionIdRef.current = '';
+  }, []);
+  
+  const handleSessionChange = useCallback((newSessionId: string) => {
+    setSessionId(newSessionId);
+    sessionIdRef.current = newSessionId;
+  }, []);
 
   // Find agent from store
   useEffect(() => {
@@ -187,7 +204,14 @@ export default function AgentDetail() {
           </TabsContent>
 
           <TabsContent value="chat" className="h-[calc(100vh-240px)]">
-            <AgentChat agent={agent} />
+            <AgentChat 
+              agent={agent}
+              sessionId={sessionId}
+              messages={chatMessages}
+              onSessionChange={handleSessionChange}
+              onMessagesChange={setChatMessages}
+              onNewSession={handleNewSession}
+            />
           </TabsContent>
 
           <TabsContent value="memory" className="space-y-6">
