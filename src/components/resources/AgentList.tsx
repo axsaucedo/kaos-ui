@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { Bot, Link2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bot, Link2, MessageSquare } from 'lucide-react';
 import { ResourceList } from '@/components/resources/ResourceList';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { AgentCreateDialog } from '@/components/resources/AgentCreateDialog';
 import type { Agent } from '@/types/kubernetes';
 
 export function AgentList() {
+  const navigate = useNavigate();
   const { agents, setSelectedResource, setSelectedResourceMode } = useKubernetesStore();
   const { deleteAgent } = useKubernetesConnection();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -86,6 +89,13 @@ export function AgentList() {
         icon={Bot}
         iconColor="agent-color"
         onAdd={() => setCreateDialogOpen(true)}
+        customActions={[
+          {
+            label: 'Details & Chat',
+            icon: MessageSquare,
+            onClick: (item: Agent) => navigate(`/agents/${item.metadata.namespace || 'default'}/${item.metadata.name}`),
+          },
+        ]}
         onView={(item) => {
           setSelectedResource(item);
           setSelectedResourceMode('view');
