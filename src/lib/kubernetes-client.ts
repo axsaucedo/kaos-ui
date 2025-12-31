@@ -468,7 +468,8 @@ class KubernetesClient {
     serviceName: string,
     path: string,
     options: RequestInit = {},
-    namespace?: string
+    namespace?: string,
+    port: number = 8000
   ): Promise<Response> {
     if (!this.config.baseUrl) {
       throw new Error('Kubernetes API not configured. Please set the base URL.');
@@ -477,9 +478,10 @@ class KubernetesClient {
     const ns = namespace || this.config.namespace;
     // Ensure path starts with /
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    const url = `${this.config.baseUrl}/api/v1/namespaces/${ns}/services/${serviceName}/proxy${cleanPath}`;
+    // Kubernetes service proxy URL format: /api/v1/namespaces/{ns}/services/{name}:{port}/proxy/{path}
+    const url = `${this.config.baseUrl}/api/v1/namespaces/${ns}/services/${serviceName}:${port}/proxy${cleanPath}`;
     
-    console.log(`[k8sClient] Proxying request to service: ${serviceName}${cleanPath}`);
+    console.log(`[k8sClient] Proxying request to: ${url}`);
     
     return fetch(url, {
       ...options,
