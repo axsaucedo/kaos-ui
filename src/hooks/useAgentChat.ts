@@ -19,10 +19,12 @@ interface UseAgentChatOptions {
   serviceName?: string; // Override service name if different from agent name
   model?: string;
   temperature?: number;
+  sessionId?: string; // Optional session ID for conversation continuity
+  onSessionIdReceived?: (sessionId: string) => void; // Callback when session ID is received from response
 }
 
 export function useAgentChat(options: UseAgentChatOptions) {
-  const { agentName, namespace, serviceName, model, temperature } = options;
+  const { agentName, namespace, serviceName, model, temperature, sessionId, onSessionIdReceived } = options;
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -76,6 +78,7 @@ export function useAgentChat(options: UseAgentChatOptions) {
           namespace,
           model,
           temperature,
+          sessionId,
           onChunk: (chunk) => {
             console.log(`[useAgentChat] Received chunk:`, chunk);
             setMessages(prev => {
@@ -87,8 +90,12 @@ export function useAgentChat(options: UseAgentChatOptions) {
               return updated;
             });
           },
-          onDone: () => {
-            console.log(`[useAgentChat] Stream complete`);
+          onDone: (metadata) => {
+            console.log(`[useAgentChat] Stream complete`, metadata);
+            // If we received a session ID and have a callback, call it
+            if (metadata?.sessionId && onSessionIdReceived) {
+              onSessionIdReceived(metadata.sessionId);
+            }
             setMessages(prev => {
               const updated = [...prev];
               const lastMessage = updated[updated.length - 1];
@@ -120,7 +127,7 @@ export function useAgentChat(options: UseAgentChatOptions) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       setIsLoading(false);
     }
-  }, [messages, isLoading, resolvedServiceName, namespace, model, temperature]);
+  }, [messages, isLoading, resolvedServiceName, namespace, model, temperature, sessionId, onSessionIdReceived]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);

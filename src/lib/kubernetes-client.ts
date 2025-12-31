@@ -506,12 +506,13 @@ class KubernetesClient {
       model?: string;
       temperature?: number;
       maxTokens?: number;
+      sessionId?: string;
       onChunk: (content: string) => void;
-      onDone: () => void;
+      onDone: (metadata?: { sessionId?: string }) => void;
       onError: (error: Error) => void;
     }
   ): Promise<void> {
-    const { namespace, model = 'default', temperature = 0.7, maxTokens, onChunk, onDone, onError } = options;
+    const { namespace, model = 'default', temperature = 0.7, maxTokens, sessionId, onChunk, onDone, onError } = options;
 
     try {
       const response = await this.proxyServiceRequest(
@@ -525,6 +526,7 @@ class KubernetesClient {
             stream: true,
             temperature,
             ...(maxTokens && { max_tokens: maxTokens }),
+            ...(sessionId && { session_id: sessionId }),
           }),
         },
         namespace
@@ -542,12 +544,13 @@ class KubernetesClient {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let receivedSessionId: string | undefined;
 
       while (true) {
         const { done, value } = await reader.read();
         
         if (done) {
-          onDone();
+          onDone({ sessionId: receivedSessionId });
           break;
         }
 
@@ -561,12 +564,17 @@ class KubernetesClient {
 
           const data = trimmed.slice(6);
           if (data === '[DONE]') {
-            onDone();
+            onDone({ sessionId: receivedSessionId });
             return;
           }
 
           try {
             const parsed = JSON.parse(data);
+            // Extract session_id from response if present
+            if (parsed.session_id && !receivedSessionId) {
+              receivedSessionId = parsed.session_id;
+              console.log('[k8sClient] Received session ID:', receivedSessionId);
+            }
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               onChunk(content);

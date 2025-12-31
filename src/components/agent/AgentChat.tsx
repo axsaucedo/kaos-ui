@@ -1,9 +1,11 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, Trash2, StopCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Send, Trash2, StopCircle, AlertCircle, RefreshCw, Hash, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Label } from '@/components/ui/label';
 import { ChatMessage } from './ChatMessage';
 import { useAgentChat } from '@/hooks/useAgentChat';
 import type { Agent } from '@/types/kubernetes';
@@ -14,12 +16,22 @@ interface AgentChatProps {
 
 export function AgentChat({ agent }: AgentChatProps) {
   const [input, setInput] = useState('');
+  const [sessionId, setSessionId] = useState('');
+  const [copied, setCopied] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  const handleSessionIdReceived = useCallback((newSessionId: string) => {
+    if (!sessionId) {
+      setSessionId(newSessionId);
+    }
+  }, [sessionId]);
 
   const { messages, isLoading, error, sendMessage, clearMessages, stopGeneration } = useAgentChat({
     agentName: agent.metadata.name,
     namespace: agent.metadata.namespace || 'default',
+    sessionId: sessionId || undefined,
+    onSessionIdReceived: handleSessionIdReceived,
   });
 
   // Auto-scroll to bottom when new messages arrive
@@ -47,8 +59,56 @@ export function AgentChat({ agent }: AgentChatProps) {
     }
   };
 
+  const handleCopySessionId = () => {
+    if (sessionId) {
+      navigator.clipboard.writeText(sessionId);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleClearAll = () => {
+    clearMessages();
+    setSessionId('');
+  };
+
   return (
     <div className="flex flex-col h-full bg-background rounded-lg border border-border overflow-hidden">
+      {/* Session ID Header */}
+      <div className="px-4 py-3 border-b border-border bg-muted/20">
+        <div className="flex items-center gap-2">
+          <Label htmlFor="session-id" className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+            <Hash className="h-3 w-3" />
+            Session ID
+          </Label>
+          <div className="flex-1 flex items-center gap-2">
+            <Input
+              id="session-id"
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              placeholder="Auto-generated on first message..."
+              className="h-7 text-xs font-mono bg-background"
+              disabled={isLoading}
+            />
+            {sessionId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleCopySessionId}
+                className="h-7 w-7 p-0 shrink-0"
+                title="Copy session ID"
+              >
+                {copied ? (
+                  <Check className="h-3 w-3 text-green-500" />
+                ) : (
+                  <Copy className="h-3 w-3" />
+                )}
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Chat Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2">
@@ -62,8 +122,8 @@ export function AgentChat({ agent }: AgentChatProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={clearMessages}
-          disabled={messages.length === 0}
+          onClick={handleClearAll}
+          disabled={messages.length === 0 && !sessionId}
           className="text-muted-foreground hover:text-destructive"
         >
           <Trash2 className="h-4 w-4 mr-1" />
