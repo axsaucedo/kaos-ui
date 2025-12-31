@@ -21,18 +21,42 @@ export function AgentChat({ agent }: AgentChatProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // Generate a session ID client-side if one is received from server
   const handleSessionIdReceived = useCallback((newSessionId: string) => {
-    if (!sessionId) {
+    if (newSessionId && !sessionId) {
       setSessionId(newSessionId);
+      console.log('[AgentChat] Session ID received from server:', newSessionId);
     }
   }, [sessionId]);
+  
+  // Generate a session ID on first message if none exists
+  const currentSessionId = useRef<string>('');
+  
+  const getOrCreateSessionId = useCallback(() => {
+    if (sessionId) {
+      currentSessionId.current = sessionId;
+      return sessionId;
+    }
+    if (!currentSessionId.current) {
+      currentSessionId.current = `session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      setSessionId(currentSessionId.current);
+      console.log('[AgentChat] Generated new session ID:', currentSessionId.current);
+    }
+    return currentSessionId.current;
+  }, [sessionId]);
 
-  const { messages, isLoading, error, sendMessage, clearMessages, stopGeneration } = useAgentChat({
+  const { messages, isLoading, error, sendMessage: sendChatMessage, clearMessages, stopGeneration } = useAgentChat({
     agentName: agent.metadata.name,
     namespace: agent.metadata.namespace || 'default',
     sessionId: sessionId || undefined,
     onSessionIdReceived: handleSessionIdReceived,
   });
+  
+  const sendMessage = useCallback((content: string) => {
+    // Ensure we have a session ID before sending the first message
+    getOrCreateSessionId();
+    sendChatMessage(content);
+  }, [getOrCreateSessionId, sendChatMessage]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -70,6 +94,7 @@ export function AgentChat({ agent }: AgentChatProps) {
   const handleClearAll = () => {
     clearMessages();
     setSessionId('');
+    currentSessionId.current = '';
   };
 
   return (
