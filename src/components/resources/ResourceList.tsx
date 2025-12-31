@@ -18,6 +18,12 @@ interface Column<T> {
   render?: (item: T) => React.ReactNode;
 }
 
+interface CustomAction<T> {
+  label: string;
+  icon?: React.ElementType;
+  onClick: (item: T) => void;
+}
+
 interface ResourceListProps<T> {
   title: string;
   description: string;
@@ -29,6 +35,7 @@ interface ResourceListProps<T> {
   onEdit?: (item: T) => void;
   onDelete?: (item: T) => void;
   onView?: (item: T) => void;
+  customActions?: CustomAction<T>[];
   getStatus?: (item: T) => string;
   getItemId: (item: T) => string;
 }
@@ -44,6 +51,7 @@ export function ResourceList<T>({
   onEdit,
   onDelete,
   onView,
+  customActions,
   getStatus,
   getItemId,
 }: ResourceListProps<T>) {
@@ -213,6 +221,19 @@ export function ResourceList<T>({
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="bg-popover border-border">
+                        {customActions?.map((action) => {
+                          const ActionIcon = action.icon;
+                          return (
+                            <DropdownMenuItem
+                              key={action.label}
+                              onClick={() => action.onClick(item)}
+                              className="gap-2"
+                            >
+                              {ActionIcon && <ActionIcon className="h-4 w-4" />}
+                              {action.label}
+                            </DropdownMenuItem>
+                          );
+                        })}
                         {onView && (
                           <DropdownMenuItem onClick={() => onView(item)} className="gap-2">
                             <Eye className="h-4 w-4" />

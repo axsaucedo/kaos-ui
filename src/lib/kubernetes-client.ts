@@ -453,6 +453,128 @@ class KubernetesClient {
       }),
     });
   }
+
+  // ============= Service Proxy Operations =============
+  
+  /**
+   * Proxy a request to a service within the cluster
+   * Uses the Kubernetes API server's built-in proxy capability
+   */
+  async proxyServiceRequest(
+    serviceName: string,
+    path: string,
+    options: RequestInit = {},
+    namespace?: string
+  ): Promise<Response> {
+    if (!this.config.baseUrl) {
+      throw new Error('Kubernetes API not configured. Please set the base URL.');
+    }
+
+    const ns = namespace || this.config.namespace;
+    // Ensure path starts with /
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    const url = `${this.config.baseUrl}/api/v1/namespaces/${ns}/services/${serviceName}/proxy${cleanPath}`;
+    
+    console.log(`[k8sClient] Proxying request to service: ${serviceName}${cleanPath}`);
+    
+    return fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'ngrok-skip-browser-warning': '1',
+        ...options.headers,
+      },
+    });
+  }
+
+  /**
+   * Stream chat completions from an OpenAI-compatible agent service
+   * Handles SSE parsing and provides callbacks for streaming updates
+   */
+  async streamChatCompletion(
+    serviceName: string,
+    messages: { role: string; content: string }[],
+    options: {
+      namespace?: string;
+      model?: string;
+      temperature?: number;
+      maxTokens?: number;
+      onChunk: (content: string) => void;
+      onDone: () => void;
+      onError: (error: Error) => void;
+    }
+  ): Promise<void> {
+    const { namespace, model = 'default', temperature = 0.7, maxTokens, onChunk, onDone, onError } = options;
+
+    try {
+      const response = await this.proxyServiceRequest(
+        serviceName,
+        '/v1/chat/completions',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            model,
+            messages,
+            stream: true,
+            temperature,
+            ...(maxTokens && { max_tokens: maxTokens }),
+          }),
+        },
+        namespace
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Chat API error ${response.status}: ${errorText}`);
+      }
+
+      if (!response.body) {
+        throw new Error('No response body');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          onDone();
+          break;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+
+          const data = trimmed.slice(6);
+          if (data === '[DONE]') {
+            onDone();
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content;
+            if (content) {
+              onChunk(content);
+            }
+          } catch (e) {
+            // Ignore parse errors for incomplete JSON
+            console.debug('[k8sClient] SSE parse skip:', data.substring(0, 50));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[k8sClient] streamChatCompletion error:', error);
+      onError(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
 }
 
 // Singleton instance
