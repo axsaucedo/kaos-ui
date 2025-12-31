@@ -20,6 +20,7 @@ import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { AgentChat } from '@/components/agent/AgentChat';
 import { AgentOverview } from '@/components/agent/AgentOverview';
+import { AgentMemory } from '@/components/agent/AgentMemory';
 import { AgentEditDialog } from '@/components/resources/AgentEditDialog';
 import type { Agent } from '@/types/kubernetes';
 
@@ -175,9 +176,10 @@ export default function AgentDetail() {
       {/* Content */}
       <main className="container px-4 py-6">
         <Tabs defaultValue="chat" className="space-y-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>
+            <TabsTrigger value="memory">Memory</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
@@ -186,6 +188,10 @@ export default function AgentDetail() {
 
           <TabsContent value="chat" className="h-[calc(100vh-240px)]">
             <AgentChat agent={agent} />
+          </TabsContent>
+
+          <TabsContent value="memory" className="space-y-6">
+            <AgentMemory agent={agent} />
           </TabsContent>
         </Tabs>
       </main>
