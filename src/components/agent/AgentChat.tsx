@@ -75,17 +75,31 @@ export function AgentChat({ agent }: AgentChatProps) {
       {error && (
         <Alert variant="destructive" className="m-4 mb-0">
           <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
-            <span>{error}</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => messages.length > 0 && sendMessage(messages[messages.length - 2]?.content || '')}
-              className="ml-2"
-            >
-              <RefreshCw className="h-3 w-3 mr-1" />
-              Retry
-            </Button>
+          <AlertDescription>
+            <div className="flex flex-col gap-2">
+              <span className="font-medium">
+                {error.includes('503') || error.includes('no endpoints') 
+                  ? 'Agent Unavailable' 
+                  : 'Connection Error'}
+              </span>
+              <span className="text-sm opacity-90">
+                {error.includes('no endpoints') 
+                  ? 'The agent pod is not ready. Check that the pod is running and healthy.'
+                  : error}
+              </span>
+              <div className="flex gap-2 mt-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => messages.length > 1 && sendMessage(messages[messages.length - 2]?.content || '')}
+                  className="h-7 text-xs"
+                  disabled={messages.length < 2}
+                >
+                  <RefreshCw className="h-3 w-3 mr-1" />
+                  Retry
+                </Button>
+              </div>
+            </div>
           </AlertDescription>
         </Alert>
       )}
