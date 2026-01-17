@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Bot, Edit, Trash2, RefreshCw, Box } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,8 +26,12 @@ import { AgentEditDialog } from '@/components/resources/AgentEditDialog';
 import type { Agent } from '@/types/kubernetes';
 import type { ChatMessage } from '@/hooks/useAgentChat';
 
+// Storage key for persisting chat sessions per agent
+const getChatStorageKey = (namespace: string, name: string) => `agent-chat-${namespace}-${name}`;
+
 export default function AgentDetail() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { agents } = useKubernetesStore();
@@ -37,16 +41,66 @@ export default function AgentDetail() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   
+  // Get initial tab from URL params (for returning from logs page)
+  const initialTab = searchParams.get('tab') || 'chat';
+  const [currentTab, setCurrentTab] = useState(initialTab);
+  
   // Chat state lifted here to persist across tab switches
   const [sessionId, setSessionId] = useState<string>('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const sessionIdRef = useRef<string>('');
+  const isInitialized = useRef(false);
+  
+  // Load persisted chat on mount
+  useEffect(() => {
+    if (namespace && name && !isInitialized.current) {
+      isInitialized.current = true;
+      const storageKey = getChatStorageKey(namespace, name);
+      try {
+        const stored = localStorage.getItem(storageKey);
+        if (stored) {
+          const { sessionId: storedSessionId, messages } = JSON.parse(stored);
+          if (storedSessionId) setSessionId(storedSessionId);
+          if (messages?.length > 0) {
+            // Restore messages with Date objects
+            setChatMessages(messages.map((m: ChatMessage) => ({
+              ...m,
+              timestamp: new Date(m.timestamp),
+            })));
+          }
+          sessionIdRef.current = storedSessionId || '';
+        }
+      } catch (e) {
+        console.warn('Failed to restore chat session:', e);
+      }
+    }
+  }, [namespace, name]);
+  
+  // Persist chat when messages change
+  useEffect(() => {
+    if (namespace && name && isInitialized.current && (chatMessages.length > 0 || sessionId)) {
+      const storageKey = getChatStorageKey(namespace, name);
+      try {
+        localStorage.setItem(storageKey, JSON.stringify({
+          sessionId,
+          messages: chatMessages,
+        }));
+      } catch (e) {
+        console.warn('Failed to persist chat session:', e);
+      }
+    }
+  }, [namespace, name, sessionId, chatMessages]);
   
   const handleNewSession = useCallback(() => {
     setSessionId('');
     setChatMessages([]);
     sessionIdRef.current = '';
-  }, []);
+    // Also clear from storage
+    if (namespace && name) {
+      const storageKey = getChatStorageKey(namespace, name);
+      localStorage.removeItem(storageKey);
+    }
+  }, [namespace, name]);
   
   const handleSessionChange = useCallback((newSessionId: string) => {
     setSessionId(newSessionId);
@@ -193,7 +247,7 @@ export default function AgentDetail() {
 
       {/* Content */}
       <main className="container px-4 py-6">
-        <Tabs defaultValue="chat" className="space-y-6">
+        <Tabs value={currentTab} onValueChange={setCurrentTab} className="space-y-6">
           <TabsList className="grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="chat">Chat</TabsTrigger>

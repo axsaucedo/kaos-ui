@@ -19,35 +19,7 @@ interface ResourcePodGroup {
   pods: Pod[];
 }
 
-function getPodStatusColor(phase: string): string {
-  switch (phase?.toLowerCase()) {
-    case 'running':
-      return 'text-green-500';
-    case 'pending':
-      return 'text-yellow-500';
-    case 'succeeded':
-      return 'text-blue-500';
-    case 'failed':
-      return 'text-red-500';
-    default:
-      return 'text-muted-foreground';
-  }
-}
-
-function getPodStatusIcon(phase: string) {
-  switch (phase?.toLowerCase()) {
-    case 'running':
-      return <CheckCircle className="h-4 w-4 text-green-500" />;
-    case 'pending':
-      return <Clock className="h-4 w-4 text-yellow-500" />;
-    case 'succeeded':
-      return <CheckCircle className="h-4 w-4 text-blue-500" />;
-    case 'failed':
-      return <XCircle className="h-4 w-4 text-red-500" />;
-    default:
-      return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
-  }
-}
+// Helper functions moved below with rolling update support
 
 function getContainerStatus(pod: Pod) {
   const containerStatuses = pod.status?.containerStatuses || [];
@@ -74,6 +46,71 @@ function getAge(timestamp?: string): string {
   if (diffHours > 0) return `${diffHours}h`;
   if (diffMins > 0) return `${diffMins}m`;
   return '<1m';
+}
+
+// Check if a pod is being terminated or is part of a rolling update
+function getPodCondition(pod: Pod): { status: string; isRolling: boolean; isTerminating: boolean } {
+  const phase = pod.status?.phase || 'Unknown';
+  const deletionTimestamp = pod.metadata.deletionTimestamp;
+  const containerStatuses = pod.status?.containerStatuses || [];
+  
+  // Pod is terminating
+  if (deletionTimestamp) {
+    return { status: 'Terminating', isRolling: true, isTerminating: true };
+  }
+  
+  // Check if any container is not ready but pod is in Running phase (rolling update in progress)
+  const notReady = containerStatuses.some(c => !c.ready);
+  if (phase === 'Running' && notReady) {
+    return { status: 'ContainerNotReady', isRolling: true, isTerminating: false };
+  }
+  
+  // Check for pending pods (new pods coming up during rolling update)
+  if (phase === 'Pending') {
+    const containerWaiting = containerStatuses.find(c => c.state?.waiting);
+    const reason = containerWaiting?.state?.waiting?.reason || 'Pending';
+    return { status: reason, isRolling: true, isTerminating: false };
+  }
+  
+  return { status: phase, isRolling: false, isTerminating: false };
+}
+
+function getPodStatusIcon(phase: string, isRolling: boolean, isTerminating: boolean) {
+  if (isTerminating) {
+    return <XCircle className="h-4 w-4 text-orange-500" />;
+  }
+  if (isRolling) {
+    return <RefreshCw className="h-4 w-4 text-yellow-500 animate-spin" />;
+  }
+  switch (phase?.toLowerCase()) {
+    case 'running':
+      return <CheckCircle className="h-4 w-4 text-green-500" />;
+    case 'pending':
+      return <Clock className="h-4 w-4 text-yellow-500" />;
+    case 'succeeded':
+      return <CheckCircle className="h-4 w-4 text-blue-500" />;
+    case 'failed':
+      return <XCircle className="h-4 w-4 text-red-500" />;
+    default:
+      return <AlertCircle className="h-4 w-4 text-muted-foreground" />;
+  }
+}
+
+function getPodStatusColor(phase: string, isRolling: boolean, isTerminating: boolean): string {
+  if (isTerminating) return 'text-orange-500';
+  if (isRolling) return 'text-yellow-500';
+  switch (phase?.toLowerCase()) {
+    case 'running':
+      return 'text-green-500';
+    case 'pending':
+      return 'text-yellow-500';
+    case 'succeeded':
+      return 'text-blue-500';
+    case 'failed':
+      return 'text-red-500';
+    default:
+      return 'text-muted-foreground';
+  }
 }
 
 function getResourceIcon(type: 'Agent' | 'ModelAPI' | 'MCPServer') {
@@ -178,7 +215,10 @@ export function AgentPods({ agent }: AgentPodsProps) {
   );
 
   const handlePodClick = (pod: Pod) => {
-    navigate(`/pods/${pod.metadata.namespace}/${pod.metadata.name}/logs`);
+    // Include return path with tab=pods to return to correct tab
+    const agentNs = agent.metadata.namespace || 'default';
+    const returnPath = encodeURIComponent(`/agents/${agentNs}/${agent.metadata.name}?tab=pods`);
+    navigate(`/pods/${pod.metadata.namespace}/${pod.metadata.name}/logs?returnTo=${returnPath}`);
   };
 
   return (
@@ -322,6 +362,7 @@ export function AgentPods({ agent }: AgentPodsProps) {
                     {group.pods.map((pod) => {
                       const { ready, total } = getContainerStatus(pod);
                       const restarts = getRestartCount(pod);
+                      const podCondition = getPodCondition(pod);
                       return (
                         <TableRow 
                           key={pod.metadata.uid} 
@@ -333,13 +374,23 @@ export function AgentPods({ agent }: AgentPodsProps) {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              {getPodStatusIcon(pod.status?.phase || 'Unknown')}
+                              {getPodStatusIcon(podCondition.status, podCondition.isRolling, podCondition.isTerminating)}
                               <span className={cn(
                                 "text-sm",
-                                getPodStatusColor(pod.status?.phase || 'Unknown')
+                                getPodStatusColor(podCondition.status, podCondition.isRolling, podCondition.isTerminating)
                               )}>
-                                {pod.status?.phase || 'Unknown'}
+                                {podCondition.status}
                               </span>
+                              {podCondition.isRolling && !podCondition.isTerminating && (
+                                <Badge variant="outline" className="text-xs text-yellow-600 border-yellow-600">
+                                  Rolling
+                                </Badge>
+                              )}
+                              {podCondition.isTerminating && (
+                                <Badge variant="outline" className="text-xs text-orange-600 border-orange-600">
+                                  Terminating
+                                </Badge>
+                              )}
                             </div>
                           </TableCell>
                           <TableCell>

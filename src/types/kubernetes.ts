@@ -23,6 +23,7 @@ export interface ResourceMetadata {
   namespace: string;
   uid?: string;
   creationTimestamp?: string;
+  deletionTimestamp?: string; // Present when pod is being terminated
   resourceVersion?: string;
   labels?: Record<string, string>;
   annotations?: Record<string, string>;
@@ -238,6 +239,11 @@ export interface Pod {
       name: string;
       ready: boolean;
       restartCount: number;
+      state?: {
+        running?: { startedAt?: string };
+        waiting?: { reason?: string; message?: string };
+        terminated?: { reason?: string; exitCode?: number };
+      };
     }[];
   };
 }

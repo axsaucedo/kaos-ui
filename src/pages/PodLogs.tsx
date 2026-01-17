@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,7 +12,11 @@ import type { Pod } from '@/types/kubernetes';
 
 export default function PodLogs() {
   const { namespace, name } = useParams<{ namespace: string; name: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  
+  // Get return path from URL params (for returning to correct tab)
+  const returnPath = searchParams.get('returnTo');
   
   const { pods } = useKubernetesStore();
   const [logs, setLogs] = useState<string>('');
@@ -106,7 +110,7 @@ export default function PodLogs() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+              <Button variant="ghost" size="icon" onClick={() => returnPath ? navigate(returnPath) : navigate(-1)}>
                 <ArrowLeft className="h-5 w-5" />
               </Button>
               <div>
