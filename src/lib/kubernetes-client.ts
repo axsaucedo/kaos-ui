@@ -514,25 +514,83 @@ class KubernetesClient {
   }
   
   /**
+   * Initialize an MCP session and get the session ID
+   * FastMCP requires initialization before any other requests
+   */
+  async initializeMCPSession(
+    serviceName: string,
+    namespace?: string,
+    port: number = 8000
+  ): Promise<string> {
+    const initRequest = {
+      jsonrpc: '2.0',
+      id: Date.now(),
+      method: 'initialize',
+      params: {
+        protocolVersion: '2025-03-26',
+        clientInfo: {
+          name: 'kaos-ui',
+          version: '1.0.0',
+        },
+        capabilities: {},
+      },
+    };
+    
+    console.log(`[k8sClient] Initializing MCP session for ${serviceName}:`, initRequest);
+    
+    const response = await this.proxyServiceRequest(
+      serviceName,
+      '/mcp',
+      {
+        method: 'POST',
+        body: JSON.stringify(initRequest),
+      },
+      namespace,
+      port
+    );
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`MCP session initialization error ${response.status}: ${errorText}`);
+    }
+    
+    // Get session ID from response header
+    const sessionId = response.headers.get('Mcp-Session-Id');
+    
+    if (!sessionId) {
+      // Some implementations return session ID in body
+      const body = await response.json();
+      console.log(`[k8sClient] MCP initialize response:`, body);
+      if (body.result?.sessionId) {
+        return body.result.sessionId;
+      }
+      throw new Error('MCP server did not return a session ID');
+    }
+    
+    console.log(`[k8sClient] MCP session initialized:`, sessionId);
+    return sessionId;
+  }
+
+  /**
    * List available tools from an MCP server via K8s service proxy
-   * Uses JSON-RPC protocol: POST /mcp with { "jsonrpc": "2.0", "method": "tools/list", "id": 1, "params": {} }
+   * Uses JSON-RPC protocol with proper session initialization
    */
   async listMCPTools(
     serviceName: string,
     namespace?: string,
     port: number = 8000
   ): Promise<{ tools: MCPTool[] }> {
-    // Generate unique request ID
-    const requestId = Date.now();
+    // First initialize session
+    const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
     
     const jsonRpcRequest = {
       jsonrpc: '2.0',
-      id: requestId,
+      id: Date.now(),
       method: 'tools/list',
       params: {},
     };
     
-    console.log(`[k8sClient] Sending JSON-RPC tools/list to ${serviceName}:`, jsonRpcRequest);
+    console.log(`[k8sClient] Sending JSON-RPC tools/list to ${serviceName} with session ${sessionId}:`, jsonRpcRequest);
     
     const response = await this.proxyServiceRequest(
       serviceName,
@@ -540,6 +598,9 @@ class KubernetesClient {
       {
         method: 'POST',
         body: JSON.stringify(jsonRpcRequest),
+        headers: {
+          'Mcp-Session-Id': sessionId,
+        },
       },
       namespace,
       port
@@ -565,7 +626,7 @@ class KubernetesClient {
 
   /**
    * Call a tool on an MCP server via K8s service proxy
-   * Uses JSON-RPC protocol: POST /mcp with { "jsonrpc": "2.0", "method": "tools/call", "id": 1, "params": { "name": "...", "arguments": {...} } }
+   * Uses JSON-RPC protocol with proper session initialization
    */
   async callMCPTool(
     serviceName: string,
@@ -574,12 +635,12 @@ class KubernetesClient {
     namespace?: string,
     port: number = 8000
   ): Promise<MCPToolCallResult> {
-    // Generate unique request ID
-    const requestId = Date.now();
+    // First initialize session
+    const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
     
     const jsonRpcRequest = {
       jsonrpc: '2.0',
-      id: requestId,
+      id: Date.now(),
       method: 'tools/call',
       params: {
         name: toolName,
@@ -587,7 +648,7 @@ class KubernetesClient {
       },
     };
     
-    console.log(`[k8sClient] Sending JSON-RPC tools/call to ${serviceName}:`, jsonRpcRequest);
+    console.log(`[k8sClient] Sending JSON-RPC tools/call to ${serviceName} with session ${sessionId}:`, jsonRpcRequest);
     
     const response = await this.proxyServiceRequest(
       serviceName,
@@ -595,6 +656,9 @@ class KubernetesClient {
       {
         method: 'POST',
         body: JSON.stringify(jsonRpcRequest),
+        headers: {
+          'Mcp-Session-Id': sessionId,
+        },
       },
       namespace,
       port
