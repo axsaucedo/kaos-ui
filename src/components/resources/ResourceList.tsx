@@ -1,14 +1,23 @@
-import React from 'react';
-import { Plus, Search, MoreVertical, Edit, Trash2, Eye, RefreshCw } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Search, Edit, Trash2, Eye, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 
 interface Column<T> {
@@ -55,8 +64,10 @@ export function ResourceList<T>({
   getStatus,
   getItemId,
 }: ResourceListProps<T>) {
-  const [search, setSearch] = React.useState('');
-  const [selectedItems, setSelectedItems] = React.useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<T | null>(null);
 
   const filteredItems = items.filter((item) => {
     const id = getItemId(item);
@@ -88,6 +99,24 @@ export function ResourceList<T>({
       default:
         return 'secondary';
     }
+  };
+
+  const handleDeleteClick = (item: T) => {
+    setItemToDelete(item);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = () => {
+    if (itemToDelete && onDelete) {
+      onDelete(itemToDelete);
+    }
+    setDeleteDialogOpen(false);
+    setItemToDelete(null);
+  };
+
+  const handleCancelDelete = () => {
+    setDeleteDialogOpen(false);
+    setItemToDelete(null);
   };
 
   return (
@@ -164,7 +193,7 @@ export function ResourceList<T>({
                   Status
                 </th>
               )}
-              <th className="w-20 px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                 Actions
               </th>
             </tr>
@@ -213,50 +242,87 @@ export function ResourceList<T>({
                       <Badge variant={getStatusVariant(status) as any}>{status}</Badge>
                     </td>
                   )}
-                  <td className="px-4 py-3 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-popover border-border">
-                        {customActions?.map((action) => {
-                          const ActionIcon = action.icon;
-                          return (
-                            <DropdownMenuItem
-                              key={action.label}
-                              onClick={() => action.onClick(item)}
-                              className="gap-2"
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      {/* Custom Actions */}
+                      {customActions?.map((action) => {
+                        const ActionIcon = action.icon;
+                        return (
+                          <Tooltip key={action.label}>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onClick={() => action.onClick(item)}
+                              >
+                                {ActionIcon && <ActionIcon className="h-4 w-4" />}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p>{action.label}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+
+                      {/* View Button */}
+                      {onView && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => onView(item)}
                             >
-                              {ActionIcon && <ActionIcon className="h-4 w-4" />}
-                              {action.label}
-                            </DropdownMenuItem>
-                          );
-                        })}
-                        {onView && (
-                          <DropdownMenuItem onClick={() => onView(item)} className="gap-2">
-                            <Eye className="h-4 w-4" />
-                            View
-                          </DropdownMenuItem>
-                        )}
-                        {onEdit && (
-                          <DropdownMenuItem onClick={() => onEdit(item)} className="gap-2">
-                            <Edit className="h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                        )}
-                        {onDelete && (
-                          <DropdownMenuItem
-                            onClick={() => onDelete(item)}
-                            className="gap-2 text-destructive focus:text-destructive"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>View details</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {/* Edit Button */}
+                      {onEdit && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8"
+                              onClick={() => onEdit(item)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Edit</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+
+                      {/* Delete Button */}
+                      {onDelete && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => handleDeleteClick(item)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Delete</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -273,6 +339,33 @@ export function ResourceList<T>({
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent className="bg-background border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this resource?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the resource
+              {itemToDelete && (
+                <span className="font-mono font-medium text-foreground">
+                  {' '}{getItemId(itemToDelete)}
+                </span>
+              )}
+              {' '}from the Kubernetes cluster.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelDelete}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
