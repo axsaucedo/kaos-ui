@@ -1,13 +1,27 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Boxes, Network, RefreshCw, Terminal } from 'lucide-react';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
+import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import type { Pod } from '@/types/kubernetes';
 
 export function PodsList() {
-  const { pods, setSelectedResource } = useKubernetesStore();
+  const navigate = useNavigate();
+  const { pods } = useKubernetesStore();
+  const { refreshAll } = useKubernetesConnection();
+
+  const handleViewLogs = (pod: Pod, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const ns = pod.metadata.namespace || 'default';
+    navigate(`/pods/${ns}/${pod.metadata.name}/logs`);
+  };
+
+  const handlePodClick = (pod: Pod) => {
+    const ns = pod.metadata.namespace || 'default';
+    navigate(`/pods/${ns}/${pod.metadata.name}/logs`);
+  };
 
   return (
     <div className="p-6 space-y-6 animate-fade-in">
@@ -22,7 +36,7 @@ export function PodsList() {
             <p className="text-muted-foreground">View and manage Kubernetes pods</p>
           </div>
         </div>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2" onClick={() => refreshAll()}>
           <RefreshCw className="h-4 w-4" />
           Refresh
         </Button>
@@ -34,7 +48,7 @@ export function PodsList() {
           <div
             key={pod.metadata.name}
             className="bg-card rounded-xl border border-border p-4 hover:border-primary/30 transition-all cursor-pointer group"
-            onClick={() => setSelectedResource(pod)}
+            onClick={() => handlePodClick(pod)}
           >
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-3">
@@ -51,7 +65,7 @@ export function PodsList() {
               <Badge
                 variant={
                   pod.status?.phase === 'Running' ? 'success' : 
-                  pod.status?.phase === 'Pending' ? 'warning' : 'error'
+                  pod.status?.phase === 'Pending' ? 'warning' : 'destructive'
                 }
               >
                 {pod.status?.phase}
@@ -85,7 +99,12 @@ export function PodsList() {
             </div>
 
             <div className="mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-              <Button variant="outline" size="xs" className="w-full gap-1">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="w-full gap-1"
+                onClick={(e) => handleViewLogs(pod, e)}
+              >
                 <Terminal className="h-3 w-3" />
                 View Logs
               </Button>
