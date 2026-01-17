@@ -14,18 +14,32 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { EnvVarEditor } from './shared/EnvVarEditor';
-import type { ModelAPI } from '@/types/kubernetes';
+import { GatewayRouteEditor } from '@/components/shared/GatewayRouteEditor';
+import { LabelsAnnotationsEditor } from '@/components/shared/LabelsAnnotationsEditor';
+import type { ModelAPI, ModelAPIMode } from '@/types/kubernetes';
 
 interface ModelAPIFormData {
+  mode: ModelAPIMode;
   apiBase: string;
   proxyModel: string;
   configYamlString: string;
   hostedModel: string;
   env: { name: string; value: string }[];
+  gatewayTimeout: string;
+  gatewayRetries: number | undefined;
+  labels: { key: string; value: string }[];
+  annotations: { key: string; value: string }[];
 }
 
 interface ModelAPIEditDialogProps {
@@ -33,6 +47,12 @@ interface ModelAPIEditDialogProps {
   open: boolean;
   onClose: () => void;
 }
+
+const recordToArray = (record?: Record<string, string>) =>
+  record ? Object.entries(record).map(([key, value]) => ({ key, value })) : [];
+
+const arrayToRecord = (arr: { key: string; value: string }[]) =>
+  arr.filter(item => item.key).reduce((acc, { key, value }) => ({ ...acc, [key]: value }), {});
 
 export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDialogProps) {
   const { toast } = useToast();
@@ -49,15 +69,22 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
     register,
     handleSubmit,
     control,
+    watch,
+    setValue,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<ModelAPIFormData>({
     defaultValues: {
+      mode: modelAPI.spec.mode,
       apiBase: modelAPI.spec.proxyConfig?.apiBase || '',
       proxyModel: modelAPI.spec.proxyConfig?.model || '',
       configYamlString: modelAPI.spec.proxyConfig?.configYaml?.fromString || '',
       hostedModel: modelAPI.spec.hostedConfig?.model || '',
       env: getEnvVars(),
+      gatewayTimeout: modelAPI.spec.gatewayRoute?.timeout || '',
+      gatewayRetries: modelAPI.spec.gatewayRoute?.retries,
+      labels: recordToArray(modelAPI.metadata.labels),
+      annotations: recordToArray(modelAPI.metadata.annotations),
     },
   });
 
@@ -66,25 +93,39 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
     name: 'env',
   });
 
+  const watchedMode = watch('mode');
+
   useEffect(() => {
     reset({
+      mode: modelAPI.spec.mode,
       apiBase: modelAPI.spec.proxyConfig?.apiBase || '',
       proxyModel: modelAPI.spec.proxyConfig?.model || '',
       configYamlString: modelAPI.spec.proxyConfig?.configYaml?.fromString || '',
       hostedModel: modelAPI.spec.hostedConfig?.model || '',
       env: getEnvVars(),
+      gatewayTimeout: modelAPI.spec.gatewayRoute?.timeout || '',
+      gatewayRetries: modelAPI.spec.gatewayRoute?.retries,
+      labels: recordToArray(modelAPI.metadata.labels),
+      annotations: recordToArray(modelAPI.metadata.annotations),
     });
   }, [modelAPI, reset]);
 
   const onSubmit = async (data: ModelAPIFormData) => {
     try {
       const envVars = data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }));
+      const labels = arrayToRecord(data.labels);
+      const annotations = arrayToRecord(data.annotations);
       
       const updatedModelAPI: ModelAPI = {
         ...modelAPI,
+        metadata: {
+          ...modelAPI.metadata,
+          labels: Object.keys(labels).length > 0 ? labels : undefined,
+          annotations: Object.keys(annotations).length > 0 ? annotations : undefined,
+        },
         spec: {
-          mode: modelAPI.spec.mode,
-          proxyConfig: modelAPI.spec.mode === 'Proxy' 
+          mode: data.mode,
+          proxyConfig: data.mode === 'Proxy' 
             ? { 
                 apiBase: data.apiBase || undefined,
                 model: data.proxyModel || undefined,
@@ -92,10 +133,16 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                 env: envVars.length > 0 ? envVars : undefined 
               }
             : undefined,
-          hostedConfig: modelAPI.spec.mode === 'Hosted'
+          hostedConfig: data.mode === 'Hosted'
             ? { 
                 model: data.hostedModel, 
                 env: envVars.length > 0 ? envVars : undefined 
+              }
+            : undefined,
+          gatewayRoute: (data.gatewayTimeout || data.gatewayRetries)
+            ? {
+                timeout: data.gatewayTimeout || undefined,
+                retries: data.gatewayRetries || undefined,
               }
             : undefined,
         },
@@ -138,19 +185,31 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
         <form onSubmit={handleSubmit(onSubmit)}>
           <ScrollArea className="h-[calc(90vh-220px)] pr-4">
             <div className="space-y-6 py-4">
-              {/* Mode (read-only) */}
+              {/* Mode */}
               <div className="space-y-2">
                 <Label>Mode</Label>
-                <div>
-                  <Badge variant="secondary">{modelAPI.spec.mode}</Badge>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Mode cannot be changed after creation
-                  </p>
-                </div>
+                <Select
+                  value={watchedMode}
+                  onValueChange={(value: ModelAPIMode) => setValue('mode', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Proxy">Proxy (LiteLLM)</SelectItem>
+                    <SelectItem value="Hosted">Hosted (Ollama)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {watchedMode === 'Proxy' 
+                    ? 'Proxy mode forwards requests to external LLM providers via LiteLLM'
+                    : 'Hosted mode runs an Ollama server with the specified model in-cluster'
+                  }
+                </p>
               </div>
 
               {/* Proxy Mode Fields */}
-              {modelAPI.spec.mode === 'Proxy' && (
+              {watchedMode === 'Proxy' && (
                 <>
                   <div className="space-y-2">
                     <Label htmlFor="apiBase">API Base URL</Label>
@@ -160,6 +219,9 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                       placeholder="e.g., http://host.docker.internal:11434"
                       className="font-mono"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Base URL of the backend LLM API to proxy to
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -170,6 +232,9 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                       placeholder="e.g., ollama/smollm2:135m"
                       className="font-mono"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      Model identifier to proxy (uses LiteLLM format)
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -180,25 +245,67 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                       placeholder="# Optional: Full LiteLLM config YAML"
                       className="font-mono text-xs min-h-[100px]"
                     />
+                    <p className="text-xs text-muted-foreground">
+                      If provided, API Base and Model are ignored
+                    </p>
                   </div>
                 </>
               )}
 
               {/* Hosted Mode Fields */}
-              {modelAPI.spec.mode === 'Hosted' && (
+              {watchedMode === 'Hosted' && (
                 <div className="space-y-2">
                   <Label htmlFor="hostedModel">Model</Label>
                   <Input
                     id="hostedModel"
-                    {...register('hostedModel', { required: 'Model is required for Hosted mode' })}
+                    {...register('hostedModel', { required: watchedMode === 'Hosted' ? 'Model is required for Hosted mode' : false })}
                     placeholder="e.g., smollm2:135m"
                     className="font-mono"
                   />
                   {errors.hostedModel && (
                     <p className="text-sm text-destructive">{errors.hostedModel.message}</p>
                   )}
+                  <p className="text-xs text-muted-foreground">
+                    Ollama model to run in the cluster
+                  </p>
                 </div>
               )}
+
+              <Separator />
+
+              {/* Gateway Route */}
+              <div className="space-y-4">
+                <Label className="text-sm font-medium">Gateway Route Settings</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gatewayTimeout" className="text-xs text-muted-foreground">
+                      Timeout
+                    </Label>
+                    <Input
+                      id="gatewayTimeout"
+                      {...register('gatewayTimeout')}
+                      placeholder="e.g., 30s, 5m"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gatewayRetries" className="text-xs text-muted-foreground">
+                      Retries
+                    </Label>
+                    <Input
+                      id="gatewayRetries"
+                      type="number"
+                      min={0}
+                      max={10}
+                      {...register('gatewayRetries', { valueAsNumber: true })}
+                      placeholder="e.g., 3"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
 
               {/* Environment Variables */}
               <EnvVarEditor
@@ -207,6 +314,16 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                 append={appendEnv}
                 remove={removeEnv}
                 fieldPrefix="env"
+              />
+
+              <Separator />
+
+              {/* Labels & Annotations */}
+              <LabelsAnnotationsEditor
+                control={control}
+                register={register}
+                labelsFieldName="labels"
+                annotationsFieldName="annotations"
               />
             </div>
           </ScrollArea>

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Box, Globe, Settings, Activity } from 'lucide-react';
+import { Box, Globe, Settings, Activity, Clock, Tag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { YamlViewer } from '@/components/shared/YamlViewer';
 import type { ModelAPI } from '@/types/kubernetes';
 
 interface ModelAPIOverviewProps {
@@ -67,12 +68,31 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
             <>
               <Separator />
               <div className="text-sm">
-                <span className="text-muted-foreground">Created</span>
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Created
+                </span>
                 <p className="font-medium">
                   {new Date(modelAPI.metadata.creationTimestamp).toLocaleString()}
                 </p>
               </div>
             </>
+          )}
+
+          {modelAPI.metadata.uid && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">UID</span>
+              <p className="font-mono text-xs text-muted-foreground truncate">
+                {modelAPI.metadata.uid}
+              </p>
+            </div>
+          )}
+
+          {modelAPI.metadata.resourceVersion && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Resource Version</span>
+              <p className="font-mono text-xs">{modelAPI.metadata.resourceVersion}</p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -92,6 +112,14 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
               <p>
                 <Badge variant={modelAPI.status?.ready ? 'success' : 'secondary'}>
                   {modelAPI.status?.ready ? 'Yes' : 'No'}
+                </Badge>
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Phase</span>
+              <p>
+                <Badge variant={getStatusVariant(modelAPI.status?.phase)}>
+                  {modelAPI.status?.phase || 'Unknown'}
                 </Badge>
               </p>
             </div>
@@ -135,14 +163,12 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
         <CardContent className="space-y-4">
           {modelAPI.spec.mode === 'Hosted' && modelAPI.spec.hostedConfig && (
             <div className="space-y-3">
-              {modelAPI.spec.hostedConfig.model && (
-                <div>
-                  <span className="text-sm text-muted-foreground">Model</span>
-                  <code className="font-mono text-sm block bg-muted px-2 py-1 rounded mt-1">
-                    {modelAPI.spec.hostedConfig.model}
-                  </code>
-                </div>
-              )}
+              <div>
+                <span className="text-sm text-muted-foreground">Model</span>
+                <code className="font-mono text-sm block bg-muted px-2 py-1 rounded mt-1">
+                  {modelAPI.spec.hostedConfig.model || 'Not specified'}
+                </code>
+              </div>
             </div>
           )}
           
@@ -164,12 +190,52 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
                   </code>
                 </div>
               )}
-              {!modelAPI.spec.proxyConfig.apiBase && !modelAPI.spec.proxyConfig.model && (
+              {modelAPI.spec.proxyConfig.configYaml?.fromString && (
+                <div>
+                  <span className="text-sm text-muted-foreground">LiteLLM Config YAML</span>
+                  <pre className="font-mono text-xs bg-muted p-3 rounded mt-1 overflow-auto max-h-[150px]">
+                    {modelAPI.spec.proxyConfig.configYaml.fromString}
+                  </pre>
+                </div>
+              )}
+              {modelAPI.spec.proxyConfig.configYaml?.fromSecretKeyRef && (
+                <div>
+                  <span className="text-sm text-muted-foreground">Config from Secret</span>
+                  <code className="font-mono text-xs block bg-muted px-2 py-1 rounded mt-1">
+                    {modelAPI.spec.proxyConfig.configYaml.fromSecretKeyRef.name}:{modelAPI.spec.proxyConfig.configYaml.fromSecretKeyRef.key}
+                  </code>
+                </div>
+              )}
+              {!modelAPI.spec.proxyConfig.apiBase && !modelAPI.spec.proxyConfig.model && !modelAPI.spec.proxyConfig.configYaml && (
                 <p className="text-sm text-muted-foreground">
                   Proxies requests to external LLM providers via LiteLLM
                 </p>
               )}
             </div>
+          )}
+
+          {/* Gateway Route */}
+          {modelAPI.spec.gatewayRoute && (
+            <>
+              <Separator />
+              <div>
+                <span className="text-sm text-muted-foreground mb-2 block">Gateway Route</span>
+                <div className="flex gap-4 text-sm">
+                  {modelAPI.spec.gatewayRoute.timeout && (
+                    <div>
+                      <span className="text-muted-foreground">Timeout:</span>{' '}
+                      <code className="font-mono">{modelAPI.spec.gatewayRoute.timeout}</code>
+                    </div>
+                  )}
+                  {modelAPI.spec.gatewayRoute.retries !== undefined && (
+                    <div>
+                      <span className="text-muted-foreground">Retries:</span>{' '}
+                      <code className="font-mono">{modelAPI.spec.gatewayRoute.retries}</code>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>
@@ -206,6 +272,49 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Labels & Annotations */}
+      {(modelAPI.metadata.labels || modelAPI.metadata.annotations) && (
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              Labels & Annotations
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            {modelAPI.metadata.labels && Object.keys(modelAPI.metadata.labels).length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2">Labels</h4>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(modelAPI.metadata.labels).map(([key, value]) => (
+                    <Badge key={key} variant="outline" className="text-xs font-mono">
+                      {key}: {value}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {modelAPI.metadata.annotations && Object.keys(modelAPI.metadata.annotations).length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2">Annotations</h4>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(modelAPI.metadata.annotations).map(([key, value]) => (
+                    <Badge key={key} variant="outline" className="text-xs font-mono">
+                      {key}: {value.length > 30 ? `${value.substring(0, 30)}...` : value}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* YAML View */}
+      <div className="md:col-span-2">
+        <YamlViewer resource={modelAPI} title="Resource YAML" maxHeight="500px" />
+      </div>
     </div>
   );
 }

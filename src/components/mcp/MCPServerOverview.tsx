@@ -1,8 +1,9 @@
 import React from 'react';
-import { Server, Package, Code, Globe, Activity } from 'lucide-react';
+import { Server, Package, Code, Globe, Activity, Clock, Tag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { YamlViewer } from '@/components/shared/YamlViewer';
 import type { MCPServer } from '@/types/kubernetes';
 
 interface MCPServerOverviewProps {
@@ -24,6 +25,7 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
   const toolsConfig = mcpServer.spec.config.tools;
   const hasPackage = toolsConfig?.fromPackage;
   const hasString = toolsConfig?.fromString;
+  const hasSecretRef = toolsConfig?.fromSecretKeyRef;
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -65,12 +67,31 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
             <>
               <Separator />
               <div className="text-sm">
-                <span className="text-muted-foreground">Created</span>
+                <span className="text-muted-foreground flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  Created
+                </span>
                 <p className="font-medium">
                   {new Date(mcpServer.metadata.creationTimestamp).toLocaleString()}
                 </p>
               </div>
             </>
+          )}
+
+          {mcpServer.metadata.uid && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">UID</span>
+              <p className="font-mono text-xs text-muted-foreground truncate">
+                {mcpServer.metadata.uid}
+              </p>
+            </div>
+          )}
+
+          {mcpServer.metadata.resourceVersion && (
+            <div className="text-sm">
+              <span className="text-muted-foreground">Resource Version</span>
+              <p className="font-mono text-xs">{mcpServer.metadata.resourceVersion}</p>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -143,7 +164,7 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
               <div>
                 <span className="text-sm text-muted-foreground">From Package</span>
                 <code className="font-mono text-sm block bg-muted px-2 py-1 rounded mt-1">
-                  {toolsConfig.fromPackage}
+                  {toolsConfig!.fromPackage}
                 </code>
               </div>
             </div>
@@ -155,13 +176,25 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
               <div className="flex-1">
                 <span className="text-sm text-muted-foreground">From Code</span>
                 <pre className="font-mono text-xs bg-muted p-3 rounded mt-1 overflow-auto max-h-[200px]">
-                  {toolsConfig.fromString}
+                  {toolsConfig!.fromString}
                 </pre>
               </div>
             </div>
           )}
+
+          {hasSecretRef && (
+            <div className="flex items-start gap-3">
+              <Code className="h-5 w-5 text-muted-foreground mt-0.5" />
+              <div>
+                <span className="text-sm text-muted-foreground">From Secret</span>
+                <code className="font-mono text-xs block bg-muted px-2 py-1 rounded mt-1">
+                  {toolsConfig!.fromSecretKeyRef!.name}:{toolsConfig!.fromSecretKeyRef!.key}
+                </code>
+              </div>
+            </div>
+          )}
           
-          {!hasPackage && !hasString && (
+          {!hasPackage && !hasString && !hasSecretRef && (
             <p className="text-sm text-muted-foreground">No tools configured</p>
           )}
 
@@ -179,6 +212,30 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
                       {tool}
                     </Badge>
                   ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Gateway Route */}
+          {mcpServer.spec.gatewayRoute && (
+            <>
+              <Separator />
+              <div>
+                <span className="text-sm text-muted-foreground mb-2 block">Gateway Route</span>
+                <div className="flex gap-4 text-sm">
+                  {mcpServer.spec.gatewayRoute.timeout && (
+                    <div>
+                      <span className="text-muted-foreground">Timeout:</span>{' '}
+                      <code className="font-mono">{mcpServer.spec.gatewayRoute.timeout}</code>
+                    </div>
+                  )}
+                  {mcpServer.spec.gatewayRoute.retries !== undefined && (
+                    <div>
+                      <span className="text-muted-foreground">Retries:</span>{' '}
+                      <code className="font-mono">{mcpServer.spec.gatewayRoute.retries}</code>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
@@ -218,6 +275,49 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* Labels & Annotations */}
+      {(mcpServer.metadata.labels || mcpServer.metadata.annotations) && (
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              Labels & Annotations
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            {mcpServer.metadata.labels && Object.keys(mcpServer.metadata.labels).length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2">Labels</h4>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(mcpServer.metadata.labels).map(([key, value]) => (
+                    <Badge key={key} variant="outline" className="text-xs font-mono">
+                      {key}: {value}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {mcpServer.metadata.annotations && Object.keys(mcpServer.metadata.annotations).length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2">Annotations</h4>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(mcpServer.metadata.annotations).map(([key, value]) => (
+                    <Badge key={key} variant="outline" className="text-xs font-mono">
+                      {key}: {value.length > 30 ? `${value.substring(0, 30)}...` : value}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* YAML View */}
+      <div className="md:col-span-2">
+        <YamlViewer resource={mcpServer} title="Resource YAML" maxHeight="500px" />
+      </div>
     </div>
   );
 }
