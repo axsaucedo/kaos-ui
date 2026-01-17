@@ -621,16 +621,13 @@ class KubernetesClient {
 
   /**
    * List available tools from an MCP server via K8s service proxy
-   * Uses JSON-RPC protocol with proper session initialization
+   * Supports both stateless HTTP transport (no session) and stateful (with session)
    */
   async listMCPTools(
     serviceName: string,
     namespace?: string,
     port: number = 8000
   ): Promise<{ tools: MCPTool[] }> {
-    // First initialize session
-    const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
-    
     const jsonRpcRequest = {
       jsonrpc: '2.0',
       id: Date.now(),
@@ -638,17 +635,15 @@ class KubernetesClient {
       params: {},
     };
     
-    console.log(`[k8sClient] Sending JSON-RPC tools/list to ${serviceName} with session ${sessionId}:`, jsonRpcRequest);
+    console.log(`[k8sClient] Sending JSON-RPC tools/list to ${serviceName}:`, jsonRpcRequest);
     
+    // Try direct request first (stateless HTTP transport)
     const response = await this.proxyServiceRequest(
       serviceName,
       '/mcp',
       {
         method: 'POST',
         body: JSON.stringify(jsonRpcRequest),
-        headers: {
-          'Mcp-Session-Id': sessionId,
-        },
       },
       namespace,
       port
@@ -656,6 +651,47 @@ class KubernetesClient {
     
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Check if server requires session (stateful mode)
+      if (errorText.includes('session') || errorText.includes('Session')) {
+        console.log(`[k8sClient] Server requires session, initializing...`);
+        const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
+        
+        // Retry with session
+        const retryResponse = await this.proxyServiceRequest(
+          serviceName,
+          '/mcp',
+          {
+            method: 'POST',
+            body: JSON.stringify(jsonRpcRequest),
+            headers: {
+              'Mcp-Session-Id': sessionId,
+            },
+          },
+          namespace,
+          port
+        );
+        
+        if (!retryResponse.ok) {
+          const retryError = await retryResponse.text();
+          throw new Error(`MCP tools list error ${retryResponse.status}: ${retryError}`);
+        }
+        
+        const jsonRpcResponse = await this.parseMCPResponse(retryResponse) as { error?: { message?: string }; result?: { tools?: MCPTool[] } } | null;
+        console.log(`[k8sClient] JSON-RPC tools/list response (with session):`, jsonRpcResponse);
+        
+        if (!jsonRpcResponse) {
+          throw new Error('MCP server returned empty response for tools/list');
+        }
+        
+        if (jsonRpcResponse.error) {
+          throw new Error(`MCP JSON-RPC error: ${jsonRpcResponse.error.message || JSON.stringify(jsonRpcResponse.error)}`);
+        }
+        
+        const result = jsonRpcResponse.result || jsonRpcResponse;
+        return { tools: (result as { tools?: MCPTool[] }).tools || [] };
+      }
+      
       throw new Error(`MCP tools list error ${response.status}: ${errorText}`);
     }
     
@@ -678,7 +714,7 @@ class KubernetesClient {
 
   /**
    * Call a tool on an MCP server via K8s service proxy
-   * Uses JSON-RPC protocol with proper session initialization
+   * Supports both stateless HTTP transport (no session) and stateful (with session)
    */
   async callMCPTool(
     serviceName: string,
@@ -687,9 +723,6 @@ class KubernetesClient {
     namespace?: string,
     port: number = 8000
   ): Promise<MCPToolCallResult> {
-    // First initialize session
-    const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
-    
     const jsonRpcRequest = {
       jsonrpc: '2.0',
       id: Date.now(),
@@ -700,17 +733,15 @@ class KubernetesClient {
       },
     };
     
-    console.log(`[k8sClient] Sending JSON-RPC tools/call to ${serviceName} with session ${sessionId}:`, jsonRpcRequest);
+    console.log(`[k8sClient] Sending JSON-RPC tools/call to ${serviceName}:`, jsonRpcRequest);
     
+    // Try direct request first (stateless HTTP transport)
     const response = await this.proxyServiceRequest(
       serviceName,
       '/mcp',
       {
         method: 'POST',
         body: JSON.stringify(jsonRpcRequest),
-        headers: {
-          'Mcp-Session-Id': sessionId,
-        },
       },
       namespace,
       port
@@ -718,6 +749,46 @@ class KubernetesClient {
     
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Check if server requires session (stateful mode)
+      if (errorText.includes('session') || errorText.includes('Session')) {
+        console.log(`[k8sClient] Server requires session for tool call, initializing...`);
+        const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
+        
+        // Retry with session
+        const retryResponse = await this.proxyServiceRequest(
+          serviceName,
+          '/mcp',
+          {
+            method: 'POST',
+            body: JSON.stringify(jsonRpcRequest),
+            headers: {
+              'Mcp-Session-Id': sessionId,
+            },
+          },
+          namespace,
+          port
+        );
+        
+        if (!retryResponse.ok) {
+          const retryError = await retryResponse.text();
+          throw new Error(`MCP tool call error ${retryResponse.status}: ${retryError}`);
+        }
+        
+        const jsonRpcResponse = await this.parseMCPResponse(retryResponse) as { error?: { message?: string }; result?: unknown } | null;
+        console.log(`[k8sClient] JSON-RPC tools/call response (with session):`, jsonRpcResponse);
+        
+        if (!jsonRpcResponse) {
+          throw new Error('MCP server returned empty response for tools/call');
+        }
+        
+        if (jsonRpcResponse.error) {
+          throw new Error(`MCP JSON-RPC error: ${jsonRpcResponse.error.message || JSON.stringify(jsonRpcResponse.error)}`);
+        }
+        
+        return (jsonRpcResponse.result || jsonRpcResponse) as MCPToolCallResult;
+      }
+      
       throw new Error(`MCP tool call error ${response.status}: ${errorText}`);
     }
     
