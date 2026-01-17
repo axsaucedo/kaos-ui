@@ -180,13 +180,13 @@ export function AgentDetailDrawer({ agent, open, onClose, onEdit }: AgentDetailD
                       <span className="text-foreground">{agent.status.message}</span>
                     </div>
                   )}
-                  {agent.status.connectedAgents && agent.status.connectedAgents.length > 0 && (
+                  {agent.status.linkedResources && Object.keys(agent.status.linkedResources).length > 0 && (
                     <div>
-                      <span className="text-muted-foreground block mb-1">Connected Agents:</span>
+                      <span className="text-muted-foreground block mb-1">Linked Resources:</span>
                       <div className="flex flex-wrap gap-1">
-                        {agent.status.connectedAgents.map((a) => (
-                          <Badge key={a} variant="outline" className="text-xs">
-                            {a}
+                        {Object.entries(agent.status.linkedResources).map(([key, value]) => (
+                          <Badge key={key} variant="outline" className="text-xs">
+                            {key}: {value}
                           </Badge>
                         ))}
                       </div>

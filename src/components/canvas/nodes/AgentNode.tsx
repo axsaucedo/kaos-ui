@@ -16,7 +16,7 @@ function AgentNodeComponent({ data, selected }: NodeProps) {
   const resource = nodeData.resource;
   const status = resource.status?.phase || 'Unknown';
   const mcpCount = resource.spec.mcpServers?.length || 0;
-  const connectedAgents = resource.status?.connectedAgents || [];
+  const linkedResources = resource.status?.linkedResources || {};
   const isExposed = resource.spec.agentNetwork?.expose || false;
 
   const getStatusVariant = () => {
@@ -128,15 +128,15 @@ function AgentNodeComponent({ data, selected }: NodeProps) {
                 Exposed
               </Badge>
             </div>
-            {connectedAgents.length > 0 && (
+            {Object.keys(linkedResources).length > 0 && (
               <div className="flex flex-wrap gap-1">
-                {connectedAgents.map((agent) => (
+                {Object.entries(linkedResources).map(([key, value]) => (
                   <Badge 
-                    key={agent} 
+                    key={key} 
                     variant="agent" 
                     className="text-[9px] px-1 py-0"
                   >
-                    {agent}
+                    {value}
                   </Badge>
                 ))}
               </div>

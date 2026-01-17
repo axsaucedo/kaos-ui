@@ -11,16 +11,20 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { EnvVarEditor } from './shared/EnvVarEditor';
 import type { MCPServer } from '@/types/kubernetes';
 
 interface MCPServerFormData {
-  mcp: string;
+  toolsSource: 'package' | 'string';
+  fromPackage: string;
+  fromString: string;
   env: { name: string; value: string }[];
 }
 
@@ -34,15 +38,24 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
   const { toast } = useToast();
   const { updateMCPServer } = useKubernetesConnection();
 
+  const getToolsSource = (): 'package' | 'string' => {
+    if (mcpServer.spec.config.tools?.fromString) return 'string';
+    return 'package';
+  };
+
   const {
     register,
     handleSubmit,
     control,
+    watch,
+    setValue,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<MCPServerFormData>({
     defaultValues: {
-      mcp: mcpServer.spec.config.mcp || '',
+      toolsSource: getToolsSource(),
+      fromPackage: mcpServer.spec.config.tools?.fromPackage || '',
+      fromString: mcpServer.spec.config.tools?.fromString || '',
       env: mcpServer.spec.config.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
     },
   });
@@ -52,9 +65,13 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
     name: 'env',
   });
 
+  const watchedToolsSource = watch('toolsSource');
+
   useEffect(() => {
     reset({
-      mcp: mcpServer.spec.config.mcp || '',
+      toolsSource: getToolsSource(),
+      fromPackage: mcpServer.spec.config.tools?.fromPackage || '',
+      fromString: mcpServer.spec.config.tools?.fromString || '',
       env: mcpServer.spec.config.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
     });
   }, [mcpServer, reset]);
@@ -68,7 +85,9 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
         spec: {
           type: mcpServer.spec.type,
           config: {
-            mcp: data.mcp,
+            tools: data.toolsSource === 'package'
+              ? { fromPackage: data.fromPackage }
+              : { fromString: data.fromString },
             env: envVars.length > 0 ? envVars : undefined,
           },
         },
@@ -122,18 +141,43 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
                 </div>
               </div>
 
-              {/* MCP Package */}
+              {/* Tools Configuration */}
               <div className="space-y-2">
-                <Label htmlFor="mcp">MCP Package</Label>
-                <Input
-                  id="mcp"
-                  {...register('mcp', { required: 'MCP package name is required' })}
-                  placeholder="e.g., mcp-server-fetch"
-                  className="font-mono"
-                />
-                {errors.mcp && (
-                  <p className="text-sm text-destructive">{errors.mcp.message}</p>
-                )}
+                <Label>Tools Source</Label>
+                <Tabs value={watchedToolsSource} onValueChange={(v) => setValue('toolsSource', v as 'package' | 'string')}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="package">From Package</TabsTrigger>
+                    <TabsTrigger value="string">From Code</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="package" className="space-y-2 mt-4">
+                    <Label htmlFor="fromPackage">Package Name</Label>
+                    <Input
+                      id="fromPackage"
+                      {...register('fromPackage', { 
+                        required: watchedToolsSource === 'package' ? 'Package name is required' : false 
+                      })}
+                      placeholder="e.g., mcp-server-calculator"
+                      className="font-mono"
+                    />
+                    {errors.fromPackage && (
+                      <p className="text-sm text-destructive">{errors.fromPackage.message}</p>
+                    )}
+                  </TabsContent>
+                  <TabsContent value="string" className="space-y-2 mt-4">
+                    <Label htmlFor="fromString">Tool Definition Code</Label>
+                    <Textarea
+                      id="fromString"
+                      {...register('fromString', {
+                        required: watchedToolsSource === 'string' ? 'Tool definition is required' : false
+                      })}
+                      placeholder="# Python code defining MCP tools..."
+                      className="font-mono text-xs min-h-[150px]"
+                    />
+                    {errors.fromString && (
+                      <p className="text-sm text-destructive">{errors.fromString.message}</p>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </div>
 
               {/* Environment Variables */}

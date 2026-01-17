@@ -36,11 +36,11 @@ export function MCPServerList() {
       ),
     },
     {
-      key: 'mcp',
-      header: 'MCP Name',
+      key: 'tools',
+      header: 'Tools Source',
       render: (item: MCPServer) => (
         <span className="text-sm text-muted-foreground font-mono">
-          {item.spec.config.mcp}
+          {item.spec.config.tools?.fromPackage || item.spec.config.tools?.fromString?.slice(0, 30) || '-'}
         </span>
       ),
     },

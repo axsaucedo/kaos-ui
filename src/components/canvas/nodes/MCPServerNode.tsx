@@ -75,8 +75,10 @@ function MCPServerNodeComponent({ data, selected }: NodeProps) {
             </Badge>
           </div>
           <div className="flex items-center justify-between">
-            <span>MCP:</span>
-            <span className="text-foreground font-medium">{resource.spec.config.mcp}</span>
+            <span>Tools:</span>
+            <span className="text-foreground font-medium truncate max-w-[100px]">
+              {resource.spec.config.tools?.fromPackage || 'Custom'}
+            </span>
           </div>
         </div>
 

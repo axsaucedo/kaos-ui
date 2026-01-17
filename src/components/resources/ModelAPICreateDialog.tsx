@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -29,7 +30,12 @@ import type { ModelAPI, ModelAPIMode } from '@/types/kubernetes';
 interface ModelAPIFormData {
   name: string;
   mode: ModelAPIMode;
-  model: string;
+  // Proxy mode fields
+  apiBase: string;
+  proxyModel: string;
+  configYamlString: string;
+  // Hosted mode fields
+  hostedModel: string;
   env: { name: string; value: string }[];
 }
 
@@ -55,7 +61,10 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
     defaultValues: {
       name: '',
       mode: 'Proxy',
-      model: '',
+      apiBase: '',
+      proxyModel: '',
+      configYamlString: '',
+      hostedModel: '',
       env: [],
     },
   });
@@ -79,7 +88,7 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
       const envVars = data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }));
       
       const newModelAPI: ModelAPI = {
-        apiVersion: 'ethical.institute/v1alpha1',
+        apiVersion: 'kaos.tools/v1alpha1',
         kind: 'ModelAPI',
         metadata: {
           name: data.name,
@@ -88,11 +97,16 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
         spec: {
           mode: data.mode,
           proxyConfig: data.mode === 'Proxy' 
-            ? { env: envVars.length > 0 ? envVars : undefined }
-            : undefined,
-          serverConfig: data.mode === 'Hosted'
             ? { 
-                model: data.model, 
+                apiBase: data.apiBase || undefined,
+                model: data.proxyModel || undefined,
+                configYaml: data.configYamlString ? { fromString: data.configYamlString } : undefined,
+                env: envVars.length > 0 ? envVars : undefined 
+              }
+            : undefined,
+          hostedConfig: data.mode === 'Hosted'
+            ? { 
+                model: data.hostedModel, 
                 env: envVars.length > 0 ? envVars : undefined 
               }
             : undefined,
@@ -178,33 +192,80 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
                       Proxy (LiteLLM)
                     </SelectItem>
                     <SelectItem value="Hosted">
-                      Hosted (vLLM)
+                      Hosted (Ollama)
                     </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   {watchedMode === 'Proxy' 
                     ? 'Proxy mode forwards requests to external LLM providers via LiteLLM'
-                    : 'Hosted mode runs a local vLLM server with the specified model'
+                    : 'Hosted mode runs an Ollama server with the specified model in-cluster'
                   }
                 </p>
               </div>
 
-              {/* Model (only for Hosted mode) */}
+              {/* Proxy Mode Fields */}
+              {watchedMode === 'Proxy' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="apiBase">API Base URL</Label>
+                    <Input
+                      id="apiBase"
+                      {...register('apiBase')}
+                      placeholder="e.g., http://host.docker.internal:11434"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Base URL of the backend LLM API to proxy to
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="proxyModel">Model</Label>
+                    <Input
+                      id="proxyModel"
+                      {...register('proxyModel')}
+                      placeholder="e.g., ollama/smollm2:135m"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Model identifier to proxy (uses LiteLLM format)
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="configYamlString">Advanced: LiteLLM Config YAML</Label>
+                    <Textarea
+                      id="configYamlString"
+                      {...register('configYamlString')}
+                      placeholder="# Optional: Full LiteLLM config YAML for advanced multi-model routing"
+                      className="font-mono text-xs min-h-[100px]"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      If provided, API Base and Model are ignored
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {/* Hosted Mode Fields */}
               {watchedMode === 'Hosted' && (
                 <div className="space-y-2">
-                  <Label htmlFor="model">Model</Label>
+                  <Label htmlFor="hostedModel">Model</Label>
                   <Input
-                    id="model"
-                    {...register('model', { 
+                    id="hostedModel"
+                    {...register('hostedModel', { 
                       required: watchedMode === 'Hosted' ? 'Model is required for Hosted mode' : false 
                     })}
-                    placeholder="e.g., meta-llama/Llama-3.1-8B-Instruct"
+                    placeholder="e.g., smollm2:135m"
                     className="font-mono"
                   />
-                  {errors.model && (
-                    <p className="text-sm text-destructive">{errors.model.message}</p>
+                  {errors.hostedModel && (
+                    <p className="text-sm text-destructive">{errors.hostedModel.message}</p>
                   )}
+                  <p className="text-xs text-muted-foreground">
+                    Ollama model to run in the cluster
+                  </p>
                 </div>
               )}
 

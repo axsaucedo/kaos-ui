@@ -1,5 +1,5 @@
 import React from 'react';
-import { Server } from 'lucide-react';
+import { Server, Package, Code } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -23,12 +23,18 @@ interface MCPServerDetailDrawerProps {
 export function MCPServerDetailDrawer({ mcpServer, open, onClose, onEdit }: MCPServerDetailDrawerProps) {
   const getStatusVariant = (phase?: string) => {
     switch (phase) {
-      case 'Running': return 'success';
+      case 'Running':
+      case 'Ready': return 'success';
       case 'Pending': return 'warning';
-      case 'Error': return 'destructive';
+      case 'Error':
+      case 'Failed': return 'destructive';
       default: return 'secondary';
     }
   };
+
+  const toolsConfig = mcpServer.spec.config.tools;
+  const hasPackage = toolsConfig?.fromPackage;
+  const hasString = toolsConfig?.fromString;
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -60,16 +66,35 @@ export function MCPServerDetailDrawer({ mcpServer, open, onClose, onEdit }: MCPS
 
             <Separator />
 
-            {/* Configuration */}
+            {/* Tools Configuration */}
             <section>
-              <h3 className="text-sm font-semibold text-foreground mb-2">Configuration</h3>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-sm text-muted-foreground">MCP Package: </span>
-                  <code className="text-sm font-mono text-foreground bg-muted/50 px-2 py-0.5 rounded">
-                    {mcpServer.spec.config.mcp}
-                  </code>
-                </div>
+              <h3 className="text-sm font-semibold text-foreground mb-2">Tools Configuration</h3>
+              <div className="space-y-3">
+                {hasPackage && (
+                  <div className="flex items-start gap-2">
+                    <Package className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div>
+                      <span className="text-sm text-muted-foreground">From Package: </span>
+                      <code className="text-sm font-mono text-foreground bg-muted/50 px-2 py-0.5 rounded">
+                        {toolsConfig.fromPackage}
+                      </code>
+                    </div>
+                  </div>
+                )}
+                {hasString && (
+                  <div className="flex items-start gap-2">
+                    <Code className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div className="flex-1">
+                      <span className="text-sm text-muted-foreground block mb-1">From Code:</span>
+                      <pre className="text-xs font-mono text-foreground bg-muted/50 p-2 rounded overflow-auto max-h-[150px]">
+                        {toolsConfig.fromString}
+                      </pre>
+                    </div>
+                  </div>
+                )}
+                {!hasPackage && !hasString && (
+                  <p className="text-sm text-muted-foreground">No tools configured</p>
+                )}
               </div>
             </section>
 

@@ -63,11 +63,19 @@ function ModelAPINodeComponent({ data, selected }: NodeProps) {
             <span>Mode:</span>
             <span className="text-foreground font-medium">{resource.spec.mode}</span>
           </div>
-          {resource.spec.mode === 'Hosted' && resource.spec.serverConfig?.model && (
+          {resource.spec.mode === 'Hosted' && resource.spec.hostedConfig?.model && (
             <div className="flex items-center justify-between">
               <span>Model:</span>
               <span className="text-foreground font-medium truncate max-w-[100px]">
-                {resource.spec.serverConfig.model.split('/').pop()}
+                {resource.spec.hostedConfig.model.split('/').pop()}
+              </span>
+            </div>
+          )}
+          {resource.spec.mode === 'Proxy' && resource.spec.proxyConfig?.model && (
+            <div className="flex items-center justify-between">
+              <span>Model:</span>
+              <span className="text-foreground font-medium truncate max-w-[100px]">
+                {resource.spec.proxyConfig.model.split('/').pop()}
               </span>
             </div>
           )}

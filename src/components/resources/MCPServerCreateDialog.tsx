@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -20,6 +21,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
@@ -29,7 +31,9 @@ import type { MCPServer, MCPServerType } from '@/types/kubernetes';
 interface MCPServerFormData {
   name: string;
   type: MCPServerType;
-  mcp: string;
+  toolsSource: 'package' | 'string';
+  fromPackage: string;
+  fromString: string;
   env: { name: string; value: string }[];
 }
 
@@ -55,7 +59,9 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
     defaultValues: {
       name: '',
       type: 'python-runtime',
-      mcp: '',
+      toolsSource: 'package',
+      fromPackage: '',
+      fromString: '',
       env: [],
     },
   });
@@ -66,6 +72,7 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
   });
 
   const watchedType = watch('type');
+  const watchedToolsSource = watch('toolsSource');
 
   const validateUniqueName = (name: string) => {
     if (mcpServers.some((server) => server.metadata.name === name)) {
@@ -79,7 +86,7 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
       const envVars = data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }));
       
       const newMCPServer: MCPServer = {
-        apiVersion: 'ethical.institute/v1alpha1',
+        apiVersion: 'kaos.tools/v1alpha1',
         kind: 'MCPServer',
         metadata: {
           name: data.name,
@@ -88,7 +95,9 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
         spec: {
           type: data.type,
           config: {
-            mcp: data.mcp,
+            tools: data.toolsSource === 'package' 
+              ? { fromPackage: data.fromPackage }
+              : { fromString: data.fromString },
             env: envVars.length > 0 ? envVars : undefined,
           },
         },
@@ -185,18 +194,49 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
                 </p>
               </div>
 
-              {/* MCP Package */}
+              {/* Tools Configuration */}
               <div className="space-y-2">
-                <Label htmlFor="mcp">MCP Package</Label>
-                <Input
-                  id="mcp"
-                  {...register('mcp', { required: 'MCP package name is required' })}
-                  placeholder={watchedType === 'python-runtime' ? 'e.g., mcp-server-fetch' : 'e.g., @anthropic/mcp-server-github'}
-                  className="font-mono"
-                />
-                {errors.mcp && (
-                  <p className="text-sm text-destructive">{errors.mcp.message}</p>
-                )}
+                <Label>Tools Source</Label>
+                <Tabs value={watchedToolsSource} onValueChange={(v) => setValue('toolsSource', v as 'package' | 'string')}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="package">From Package</TabsTrigger>
+                    <TabsTrigger value="string">From Code</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="package" className="space-y-2 mt-4">
+                    <Label htmlFor="fromPackage">Package Name</Label>
+                    <Input
+                      id="fromPackage"
+                      {...register('fromPackage', { 
+                        required: watchedToolsSource === 'package' ? 'Package name is required' : false 
+                      })}
+                      placeholder={watchedType === 'python-runtime' ? 'e.g., mcp-server-calculator' : 'e.g., @anthropic/mcp-server-github'}
+                      className="font-mono"
+                    />
+                    {errors.fromPackage && (
+                      <p className="text-sm text-destructive">{errors.fromPackage.message}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Package to run with {watchedType === 'python-runtime' ? 'uvx' : 'npx'}
+                    </p>
+                  </TabsContent>
+                  <TabsContent value="string" className="space-y-2 mt-4">
+                    <Label htmlFor="fromString">Tool Definition Code</Label>
+                    <Textarea
+                      id="fromString"
+                      {...register('fromString', {
+                        required: watchedToolsSource === 'string' ? 'Tool definition is required' : false
+                      })}
+                      placeholder="# Python code defining MCP tools dynamically..."
+                      className="font-mono text-xs min-h-[150px]"
+                    />
+                    {errors.fromString && (
+                      <p className="text-sm text-destructive">{errors.fromString.message}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Python literal string defining tools dynamically
+                    </p>
+                  </TabsContent>
+                </Tabs>
               </div>
 
               {/* Environment Variables */}

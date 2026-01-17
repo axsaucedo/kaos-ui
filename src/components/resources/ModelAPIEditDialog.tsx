@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -20,7 +21,10 @@ import { EnvVarEditor } from './shared/EnvVarEditor';
 import type { ModelAPI } from '@/types/kubernetes';
 
 interface ModelAPIFormData {
-  model: string;
+  apiBase: string;
+  proxyModel: string;
+  configYamlString: string;
+  hostedModel: string;
   env: { name: string; value: string }[];
 }
 
@@ -38,7 +42,7 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
     if (modelAPI.spec.mode === 'Proxy') {
       return modelAPI.spec.proxyConfig?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [];
     }
-    return modelAPI.spec.serverConfig?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [];
+    return modelAPI.spec.hostedConfig?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [];
   };
 
   const {
@@ -49,7 +53,10 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
     formState: { errors, isSubmitting },
   } = useForm<ModelAPIFormData>({
     defaultValues: {
-      model: modelAPI.spec.serverConfig?.model || '',
+      apiBase: modelAPI.spec.proxyConfig?.apiBase || '',
+      proxyModel: modelAPI.spec.proxyConfig?.model || '',
+      configYamlString: modelAPI.spec.proxyConfig?.configYaml?.fromString || '',
+      hostedModel: modelAPI.spec.hostedConfig?.model || '',
       env: getEnvVars(),
     },
   });
@@ -61,7 +68,10 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
 
   useEffect(() => {
     reset({
-      model: modelAPI.spec.serverConfig?.model || '',
+      apiBase: modelAPI.spec.proxyConfig?.apiBase || '',
+      proxyModel: modelAPI.spec.proxyConfig?.model || '',
+      configYamlString: modelAPI.spec.proxyConfig?.configYaml?.fromString || '',
+      hostedModel: modelAPI.spec.hostedConfig?.model || '',
       env: getEnvVars(),
     });
   }, [modelAPI, reset]);
@@ -75,11 +85,16 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
         spec: {
           mode: modelAPI.spec.mode,
           proxyConfig: modelAPI.spec.mode === 'Proxy' 
-            ? { env: envVars.length > 0 ? envVars : undefined }
-            : undefined,
-          serverConfig: modelAPI.spec.mode === 'Hosted'
             ? { 
-                model: data.model, 
+                apiBase: data.apiBase || undefined,
+                model: data.proxyModel || undefined,
+                configYaml: data.configYamlString ? { fromString: data.configYamlString } : undefined,
+                env: envVars.length > 0 ? envVars : undefined 
+              }
+            : undefined,
+          hostedConfig: modelAPI.spec.mode === 'Hosted'
+            ? { 
+                model: data.hostedModel, 
                 env: envVars.length > 0 ? envVars : undefined 
               }
             : undefined,
@@ -134,18 +149,53 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                 </div>
               </div>
 
-              {/* Model (only for Hosted mode) */}
+              {/* Proxy Mode Fields */}
+              {modelAPI.spec.mode === 'Proxy' && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="apiBase">API Base URL</Label>
+                    <Input
+                      id="apiBase"
+                      {...register('apiBase')}
+                      placeholder="e.g., http://host.docker.internal:11434"
+                      className="font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="proxyModel">Model</Label>
+                    <Input
+                      id="proxyModel"
+                      {...register('proxyModel')}
+                      placeholder="e.g., ollama/smollm2:135m"
+                      className="font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="configYamlString">Advanced: LiteLLM Config YAML</Label>
+                    <Textarea
+                      id="configYamlString"
+                      {...register('configYamlString')}
+                      placeholder="# Optional: Full LiteLLM config YAML"
+                      className="font-mono text-xs min-h-[100px]"
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* Hosted Mode Fields */}
               {modelAPI.spec.mode === 'Hosted' && (
                 <div className="space-y-2">
-                  <Label htmlFor="model">Model</Label>
+                  <Label htmlFor="hostedModel">Model</Label>
                   <Input
-                    id="model"
-                    {...register('model', { required: modelAPI.spec.mode === 'Hosted' ? 'Model is required for Hosted mode' : false })}
-                    placeholder="e.g., meta-llama/Llama-3.1-8B-Instruct"
+                    id="hostedModel"
+                    {...register('hostedModel', { required: 'Model is required for Hosted mode' })}
+                    placeholder="e.g., smollm2:135m"
                     className="font-mono"
                   />
-                  {errors.model && (
-                    <p className="text-sm text-destructive">{errors.model.message}</p>
+                  {errors.hostedModel && (
+                    <p className="text-sm text-destructive">{errors.hostedModel.message}</p>
                   )}
                 </div>
               )}

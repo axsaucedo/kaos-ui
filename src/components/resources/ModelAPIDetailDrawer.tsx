@@ -23,16 +23,18 @@ interface ModelAPIDetailDrawerProps {
 export function ModelAPIDetailDrawer({ modelAPI, open, onClose, onEdit }: ModelAPIDetailDrawerProps) {
   const getStatusVariant = (phase?: string) => {
     switch (phase) {
-      case 'Running': return 'success';
+      case 'Running':
+      case 'Ready': return 'success';
       case 'Pending': return 'warning';
-      case 'Error': return 'destructive';
+      case 'Error':
+      case 'Failed': return 'destructive';
       default: return 'secondary';
     }
   };
 
   const envVars = modelAPI.spec.mode === 'Proxy' 
     ? modelAPI.spec.proxyConfig?.env 
-    : modelAPI.spec.serverConfig?.env;
+    : modelAPI.spec.hostedConfig?.env;
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -70,18 +72,38 @@ export function ModelAPIDetailDrawer({ modelAPI, open, onClose, onEdit }: ModelA
             <section>
               <h3 className="text-sm font-semibold text-foreground mb-2">Configuration</h3>
               <div className="space-y-2">
-                {modelAPI.spec.mode === 'Hosted' && modelAPI.spec.serverConfig?.model && (
+                {modelAPI.spec.mode === 'Hosted' && modelAPI.spec.hostedConfig?.model && (
                   <div>
                     <span className="text-sm text-muted-foreground">Model: </span>
                     <span className="text-sm font-mono text-foreground">
-                      {modelAPI.spec.serverConfig.model}
+                      {modelAPI.spec.hostedConfig.model}
                     </span>
                   </div>
                 )}
                 {modelAPI.spec.mode === 'Proxy' && (
-                  <p className="text-sm text-muted-foreground">
-                    Proxies requests to external LLM providers via LiteLLM
-                  </p>
+                  <>
+                    {modelAPI.spec.proxyConfig?.apiBase && (
+                      <div>
+                        <span className="text-sm text-muted-foreground">API Base: </span>
+                        <span className="text-sm font-mono text-foreground">
+                          {modelAPI.spec.proxyConfig.apiBase}
+                        </span>
+                      </div>
+                    )}
+                    {modelAPI.spec.proxyConfig?.model && (
+                      <div>
+                        <span className="text-sm text-muted-foreground">Model: </span>
+                        <span className="text-sm font-mono text-foreground">
+                          {modelAPI.spec.proxyConfig.model}
+                        </span>
+                      </div>
+                    )}
+                    {!modelAPI.spec.proxyConfig?.apiBase && !modelAPI.spec.proxyConfig?.model && (
+                      <p className="text-sm text-muted-foreground">
+                        Proxies requests to external LLM providers via LiteLLM
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </section>
@@ -138,6 +160,12 @@ export function ModelAPIDetailDrawer({ modelAPI, open, onClose, onEdit }: ModelA
               <section>
                 <h3 className="text-sm font-semibold text-foreground mb-2">Status Details</h3>
                 <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Ready</span>
+                    <Badge variant={modelAPI.status.ready ? 'success' : 'secondary'}>
+                      {modelAPI.status.ready ? 'Yes' : 'No'}
+                    </Badge>
+                  </div>
                   {modelAPI.status.message && (
                     <div>
                       <span className="text-muted-foreground">Message: </span>
