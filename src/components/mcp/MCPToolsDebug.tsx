@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Wrench, 
   Play, 
   RefreshCw, 
   AlertCircle, 
-  CheckCircle2, 
+  CheckCircle2,
   ChevronDown, 
   ChevronRight,
   Copy,
@@ -25,6 +25,7 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { k8sClient } from '@/lib/kubernetes-client';
+import { MCPClient, createMCPClientFromEndpoint, createMCPClient } from '@/lib/mcp-client';
 import type { MCPServer } from '@/types/kubernetes';
 import type { MCPTool, MCPToolCallResult } from '@/types/mcp';
 
@@ -58,33 +59,54 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
   const serviceName = `mcpserver-${mcpServer.metadata.name}`;
   const namespace = mcpServer.metadata.namespace || 'default';
 
-  // Fetch available tools
+  // Create and persist MCP client
+  const mcpClientRef = useRef<MCPClient | null>(null);
+
+  // Get or create MCP client
+  const getMCPClient = useCallback(() => {
+    if (!mcpClientRef.current) {
+      const k8sBaseUrl = k8sClient.getConfig().baseUrl;
+      if (!k8sBaseUrl) {
+        throw new Error('Kubernetes API not configured');
+      }
+      
+      if (endpoint) {
+        console.log(`[MCPToolsDebug] Creating MCP client from endpoint: ${endpoint}`);
+        mcpClientRef.current = createMCPClientFromEndpoint(k8sBaseUrl, endpoint);
+      } else {
+        console.log(`[MCPToolsDebug] Creating MCP client for service: ${serviceName}`);
+        mcpClientRef.current = createMCPClient(k8sBaseUrl, serviceName, namespace);
+      }
+    }
+    return mcpClientRef.current;
+  }, [endpoint, serviceName, namespace]);
+
+  // Reset client when server changes
+  useEffect(() => {
+    mcpClientRef.current = null;
+  }, [endpoint, serviceName, namespace]);
+
+  // Fetch available tools using the new MCP client
   const fetchTools = useCallback(async () => {
     setIsLoadingTools(true);
     setToolsError(null);
     
     try {
-      if (endpoint) {
-        // Use direct endpoint from MCPServer status
-        console.log(`[MCPToolsDebug] Fetching tools from endpoint: ${endpoint}`);
-        const response = await k8sClient.listMCPToolsFromEndpoint(endpoint);
-        console.log(`[MCPToolsDebug] Received tools:`, response);
-        setTools(response.tools || []);
-      } else {
-        // Fallback to service proxy
-        console.log(`[MCPToolsDebug] Fetching tools from service: ${serviceName}`);
-        const response = await k8sClient.listMCPTools(serviceName, namespace);
-        console.log(`[MCPToolsDebug] Received tools:`, response);
-        setTools(response.tools || []);
-      }
+      const client = getMCPClient();
+      console.log(`[MCPToolsDebug] Fetching tools using MCPClient`);
+      const toolsList = await client.listTools();
+      console.log(`[MCPToolsDebug] Received tools:`, toolsList);
+      setTools(toolsList || []);
     } catch (error) {
       console.error('[MCPToolsDebug] Error fetching tools:', error);
       setToolsError(error instanceof Error ? error.message : 'Failed to fetch tools');
       setTools([]);
+      // Reset client on error to force re-initialization
+      mcpClientRef.current = null;
     } finally {
       setIsLoadingTools(false);
     }
-  }, [endpoint, serviceName, namespace]);
+  }, [getMCPClient]);
 
   // Fetch tools on mount
   useEffect(() => {
@@ -164,14 +186,8 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
 
     try {
       console.log(`[MCPToolsDebug] Calling tool: ${selectedTool.name} with args:`, parsedArgs);
-      let result: MCPToolCallResult;
-      if (endpoint) {
-        // Use direct endpoint from MCPServer status
-        result = await k8sClient.callMCPToolFromEndpoint(endpoint, selectedTool.name, parsedArgs);
-      } else {
-        // Fallback to service proxy
-        result = await k8sClient.callMCPTool(serviceName, selectedTool.name, parsedArgs, namespace);
-      }
+      const client = getMCPClient();
+      const result = await client.callTool(selectedTool.name, parsedArgs);
       console.log(`[MCPToolsDebug] Tool result:`, result);
       
       historyEntry.result = result;
