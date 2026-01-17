@@ -1,7 +1,9 @@
 import React from 'react';
-import { Bot, Server, Network, Clock, Tag, FileCode } from 'lucide-react';
+import { Bot, Server, Network, Clock, Tag, FileCode, Settings, Activity, Globe } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { YamlViewer } from '@/components/shared/YamlViewer';
 import type { Agent } from '@/types/kubernetes';
 
 interface AgentOverviewProps {
@@ -10,6 +12,18 @@ interface AgentOverviewProps {
 
 export function AgentOverview({ agent }: AgentOverviewProps) {
   const { metadata, spec, status } = agent;
+
+  const getStatusVariant = (phase?: string) => {
+    switch (phase) {
+      case 'Running':
+      case 'Ready': return 'success';
+      case 'Pending':
+      case 'Waiting': return 'warning';
+      case 'Error':
+      case 'Failed': return 'destructive';
+      default: return 'secondary';
+    }
+  };
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -22,24 +36,93 @@ export function AgentOverview({ agent }: AgentOverviewProps) {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <InfoRow label="Name" value={metadata.name} />
-          <InfoRow label="Namespace" value={metadata.namespace || 'default'} />
+          <InfoRow label="Name" value={<span className="font-mono">{metadata.name}</span>} />
+          <InfoRow label="Namespace" value={<span className="font-mono">{metadata.namespace || 'default'}</span>} />
           <InfoRow
             label="Created"
-            value={metadata.creationTimestamp
-              ? new Date(metadata.creationTimestamp).toLocaleString()
-              : 'Unknown'}
+            value={
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {metadata.creationTimestamp
+                  ? new Date(metadata.creationTimestamp).toLocaleString()
+                  : 'Unknown'}
+              </span>
+            }
           />
           <InfoRow
             label="Status"
             value={
-              <Badge variant={status?.phase === 'Running' ? 'success' : 'secondary'}>
+              <Badge variant={getStatusVariant(status?.phase)}>
                 {status?.phase || 'Unknown'}
+              </Badge>
+            }
+          />
+          <InfoRow
+            label="Ready"
+            value={
+              <Badge variant={status?.ready ? 'success' : 'secondary'}>
+                {status?.ready ? 'Yes' : 'No'}
               </Badge>
             }
           />
           {spec.config?.description && (
             <InfoRow label="Description" value={spec.config.description} />
+          )}
+          {metadata.uid && (
+            <InfoRow 
+              label="UID" 
+              value={<span className="font-mono text-xs text-muted-foreground truncate block max-w-[200px]">{metadata.uid}</span>} 
+            />
+          )}
+          {metadata.resourceVersion && (
+            <InfoRow 
+              label="Resource Version" 
+              value={<span className="font-mono text-xs">{metadata.resourceVersion}</span>} 
+            />
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Status Details */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Activity className="h-4 w-4 text-agent" />
+            Status Details
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {status?.endpoint && (
+            <div>
+              <span className="text-sm text-muted-foreground flex items-center gap-1">
+                <Globe className="h-3 w-3" />
+                Endpoint
+              </span>
+              <code className="font-mono text-xs bg-muted px-2 py-1 rounded mt-1 block overflow-auto">
+                {status.endpoint}
+              </code>
+            </div>
+          )}
+          {status?.message && (
+            <div>
+              <span className="text-sm text-muted-foreground">Message</span>
+              <p className="text-sm mt-1">{status.message}</p>
+            </div>
+          )}
+          {status?.linkedResources && Object.keys(status.linkedResources).length > 0 && (
+            <div>
+              <span className="text-sm text-muted-foreground mb-2 block">Linked Resources</span>
+              <div className="flex flex-wrap gap-1">
+                {Object.entries(status.linkedResources).map(([key, value]) => (
+                  <Badge key={key} variant="outline" className="text-xs font-mono">
+                    {key}: {value}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+          )}
+          {!status?.endpoint && !status?.message && !status?.linkedResources && (
+            <p className="text-sm text-muted-foreground">No additional status information</p>
           )}
         </CardContent>
       </Card>
@@ -57,20 +140,33 @@ export function AgentOverview({ agent }: AgentOverviewProps) {
             label="Model API"
             value={<Badge variant="modelapi">{spec.modelAPI}</Badge>}
           />
-          <InfoRow
-            label="Instructions"
-            value={
-              spec.config?.instructions ? (
-                <span className="text-xs font-mono bg-muted/50 px-2 py-1 rounded block mt-1 whitespace-pre-wrap max-h-24 overflow-auto">
-                  {spec.config.instructions.length > 200
-                    ? `${spec.config.instructions.substring(0, 200)}...`
-                    : spec.config.instructions}
-                </span>
-              ) : (
-                <span className="text-muted-foreground">Not configured</span>
-              )
-            }
-          />
+          {spec.config?.reasoningLoopMaxSteps && (
+            <InfoRow
+              label="Max Reasoning Steps"
+              value={<span className="font-mono">{spec.config.reasoningLoopMaxSteps}</span>}
+            />
+          )}
+          {spec.waitForDependencies !== undefined && (
+            <InfoRow
+              label="Wait for Dependencies"
+              value={
+                <Badge variant={spec.waitForDependencies ? 'success' : 'secondary'}>
+                  {spec.waitForDependencies ? 'Yes' : 'No'}
+                </Badge>
+              }
+            />
+          )}
+          <Separator />
+          <div>
+            <span className="text-sm text-muted-foreground">Instructions</span>
+            {spec.config?.instructions ? (
+              <pre className="text-xs font-mono bg-muted/50 px-2 py-1 rounded block mt-1 whitespace-pre-wrap max-h-32 overflow-auto">
+                {spec.config.instructions}
+              </pre>
+            ) : (
+              <p className="text-sm text-muted-foreground mt-1">Not configured</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -118,7 +214,7 @@ export function AgentOverview({ agent }: AgentOverviewProps) {
           />
           {spec.agentNetwork?.access && spec.agentNetwork.access.length > 0 && (
             <div>
-              <span className="text-sm text-muted-foreground">Access List:</span>
+              <span className="text-sm text-muted-foreground">Access List</span>
               <div className="flex flex-wrap gap-1 mt-1">
                 {spec.agentNetwork.access.map((peer) => (
                   <Badge key={peer} variant="outline" className="text-xs">
@@ -131,13 +227,72 @@ export function AgentOverview({ agent }: AgentOverviewProps) {
         </CardContent>
       </Card>
 
+      {/* Gateway Route */}
+      {spec.gatewayRoute && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Settings className="h-4 w-4 text-muted-foreground" />
+              Gateway Route
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {spec.gatewayRoute.timeout && (
+              <InfoRow
+                label="Timeout"
+                value={<code className="font-mono">{spec.gatewayRoute.timeout}</code>}
+              />
+            )}
+            {spec.gatewayRoute.retries !== undefined && (
+              <InfoRow
+                label="Retries"
+                value={<code className="font-mono">{spec.gatewayRoute.retries}</code>}
+              />
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Environment Variables */}
+      {spec.config?.env && spec.config.env.length > 0 && (
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">
+              Environment Variables ({spec.config.env.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="bg-muted/50 rounded-lg overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
+                    <th className="text-left p-3 font-medium text-muted-foreground">Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {spec.config.env.map((envVar, idx) => (
+                    <tr key={idx} className="border-b border-border last:border-0">
+                      <td className="p-3 font-mono text-xs">{envVar.name}</td>
+                      <td className="p-3 font-mono text-xs text-muted-foreground truncate max-w-[300px]">
+                        {envVar.value || (envVar.valueFrom ? '<from secret/configmap>' : '-')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Labels & Annotations */}
       {(metadata.labels || metadata.annotations) && (
         <Card className="md:col-span-2">
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
               <Tag className="h-4 w-4 text-muted-foreground" />
-              Metadata
+              Labels & Annotations
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-2">
@@ -168,6 +323,11 @@ export function AgentOverview({ agent }: AgentOverviewProps) {
           </CardContent>
         </Card>
       )}
+
+      {/* YAML View */}
+      <div className="md:col-span-2">
+        <YamlViewer resource={agent} title="Resource YAML" maxHeight="500px" />
+      </div>
     </div>
   );
 }

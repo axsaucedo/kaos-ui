@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator';
 import {
   Select,
   SelectContent,
@@ -25,7 +26,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
-import type { Agent, EnvVar } from '@/types/kubernetes';
+import { LabelsAnnotationsEditor } from '@/components/shared/LabelsAnnotationsEditor';
+import type { Agent } from '@/types/kubernetes';
 
 interface AgentFormData {
   description: string;
@@ -34,7 +36,13 @@ interface AgentFormData {
   mcpServers: string[];
   networkExpose: boolean;
   networkAccess: string[];
+  reasoningLoopMaxSteps: number | undefined;
+  waitForDependencies: boolean;
+  gatewayTimeout: string;
+  gatewayRetries: number | undefined;
   env: { name: string; value: string }[];
+  labels: { key: string; value: string }[];
+  annotations: { key: string; value: string }[];
 }
 
 interface AgentEditDialogProps {
@@ -42,6 +50,12 @@ interface AgentEditDialogProps {
   open: boolean;
   onClose: () => void;
 }
+
+const recordToArray = (record?: Record<string, string>) =>
+  record ? Object.entries(record).map(([key, value]) => ({ key, value })) : [];
+
+const arrayToRecord = (arr: { key: string; value: string }[]) =>
+  arr.filter(item => item.key).reduce((acc, { key, value }) => ({ ...acc, [key]: value }), {});
 
 export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) {
   const { toast } = useToast();
@@ -58,13 +72,19 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
     formState: { errors, isSubmitting },
   } = useForm<AgentFormData>({
     defaultValues: {
-      description: agent.spec.config.description || '',
-      instructions: agent.spec.config.instructions || '',
+      description: agent.spec.config?.description || '',
+      instructions: agent.spec.config?.instructions || '',
       modelAPI: agent.spec.modelAPI || '',
       mcpServers: agent.spec.mcpServers || [],
       networkExpose: agent.spec.agentNetwork?.expose || false,
       networkAccess: agent.spec.agentNetwork?.access || [],
-      env: agent.spec.config.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
+      reasoningLoopMaxSteps: agent.spec.config?.reasoningLoopMaxSteps,
+      waitForDependencies: agent.spec.waitForDependencies || false,
+      gatewayTimeout: agent.spec.gatewayRoute?.timeout || '',
+      gatewayRetries: agent.spec.gatewayRoute?.retries,
+      env: agent.spec.config?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
+      labels: recordToArray(agent.metadata.labels),
+      annotations: recordToArray(agent.metadata.annotations),
     },
   });
 
@@ -77,23 +97,38 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
   const watchedMcpServers = watch('mcpServers');
   const watchedNetworkExpose = watch('networkExpose');
   const watchedNetworkAccess = watch('networkAccess');
+  const watchedWaitForDependencies = watch('waitForDependencies');
 
   useEffect(() => {
     reset({
-      description: agent.spec.config.description || '',
-      instructions: agent.spec.config.instructions || '',
+      description: agent.spec.config?.description || '',
+      instructions: agent.spec.config?.instructions || '',
       modelAPI: agent.spec.modelAPI || '',
       mcpServers: agent.spec.mcpServers || [],
       networkExpose: agent.spec.agentNetwork?.expose || false,
       networkAccess: agent.spec.agentNetwork?.access || [],
-      env: agent.spec.config.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
+      reasoningLoopMaxSteps: agent.spec.config?.reasoningLoopMaxSteps,
+      waitForDependencies: agent.spec.waitForDependencies || false,
+      gatewayTimeout: agent.spec.gatewayRoute?.timeout || '',
+      gatewayRetries: agent.spec.gatewayRoute?.retries,
+      env: agent.spec.config?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
+      labels: recordToArray(agent.metadata.labels),
+      annotations: recordToArray(agent.metadata.annotations),
     });
   }, [agent, reset]);
 
   const onSubmit = async (data: AgentFormData) => {
     try {
+      const labels = arrayToRecord(data.labels);
+      const annotations = arrayToRecord(data.annotations);
+      
       const updatedAgent: Agent = {
         ...agent,
+        metadata: {
+          ...agent.metadata,
+          labels: Object.keys(labels).length > 0 ? labels : undefined,
+          annotations: Object.keys(annotations).length > 0 ? annotations : undefined,
+        },
         spec: {
           modelAPI: data.modelAPI,
           mcpServers: data.mcpServers.length > 0 ? data.mcpServers : undefined,
@@ -101,9 +136,17 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
             expose: data.networkExpose,
             access: data.networkAccess.length > 0 ? data.networkAccess : undefined,
           },
+          waitForDependencies: data.waitForDependencies || undefined,
+          gatewayRoute: (data.gatewayTimeout || data.gatewayRetries)
+            ? {
+                timeout: data.gatewayTimeout || undefined,
+                retries: data.gatewayRetries || undefined,
+              }
+            : undefined,
           config: {
-            description: data.description,
-            instructions: data.instructions,
+            description: data.description || undefined,
+            instructions: data.instructions || undefined,
+            reasoningLoopMaxSteps: data.reasoningLoopMaxSteps || undefined,
             env: data.env.length > 0 
               ? data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }))
               : undefined,
@@ -173,12 +216,9 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
                 <Label htmlFor="description">Description</Label>
                 <Input
                   id="description"
-                  {...register('description', { required: 'Description is required' })}
+                  {...register('description')}
                   placeholder="Agent description"
                 />
-                {errors.description && (
-                  <p className="text-sm text-destructive">{errors.description.message}</p>
-                )}
               </div>
 
               {/* Instructions */}
@@ -186,13 +226,10 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
                 <Label htmlFor="instructions">Instructions</Label>
                 <Textarea
                   id="instructions"
-                  {...register('instructions', { required: 'Instructions are required' })}
+                  {...register('instructions')}
                   placeholder="Agent instructions and behavior..."
                   rows={4}
                 />
-                {errors.instructions && (
-                  <p className="text-sm text-destructive">{errors.instructions.message}</p>
-                )}
               </div>
 
               {/* Model API */}
@@ -235,9 +272,52 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
                 </div>
               )}
 
+              <Separator />
+
+              {/* Reasoning Loop Settings */}
+              <div className="space-y-4">
+                <Label className="text-sm font-medium">Reasoning Settings</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="reasoningLoopMaxSteps" className="text-xs text-muted-foreground">
+                      Max Reasoning Steps
+                    </Label>
+                    <Input
+                      id="reasoningLoopMaxSteps"
+                      type="number"
+                      min={1}
+                      max={20}
+                      {...register('reasoningLoopMaxSteps', { valueAsNumber: true })}
+                      placeholder="Default: 5"
+                      className="font-mono text-sm"
+                    />
+                    <p className="text-[10px] text-muted-foreground">
+                      Max iterations before stopping (1-20)
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground">Wait for Dependencies</Label>
+                    <div className="flex items-center gap-2 pt-2">
+                      <Switch
+                        checked={watchedWaitForDependencies}
+                        onCheckedChange={(checked) => setValue('waitForDependencies', checked)}
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {watchedWaitForDependencies ? 'Enabled' : 'Disabled'}
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      Wait for ModelAPI and MCPServers to be ready
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
               {/* Agent Network */}
               <div className="space-y-4">
-                <Label>Agent Network</Label>
+                <Label className="text-sm font-medium">Agent Network</Label>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">Expose Agent</span>
                   <Switch
@@ -265,6 +345,42 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
                   </div>
                 )}
               </div>
+
+              <Separator />
+
+              {/* Gateway Route */}
+              <div className="space-y-4">
+                <Label className="text-sm font-medium">Gateway Route Settings</Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="gatewayTimeout" className="text-xs text-muted-foreground">
+                      Timeout
+                    </Label>
+                    <Input
+                      id="gatewayTimeout"
+                      {...register('gatewayTimeout')}
+                      placeholder="e.g., 30s, 5m"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="gatewayRetries" className="text-xs text-muted-foreground">
+                      Retries
+                    </Label>
+                    <Input
+                      id="gatewayRetries"
+                      type="number"
+                      min={0}
+                      max={10}
+                      {...register('gatewayRetries', { valueAsNumber: true })}
+                      placeholder="e.g., 3"
+                      className="font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
 
               {/* Environment Variables */}
               <div className="space-y-2">
@@ -307,6 +423,16 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
                   </div>
                 )}
               </div>
+
+              <Separator />
+
+              {/* Labels & Annotations */}
+              <LabelsAnnotationsEditor
+                control={control}
+                register={register}
+                labelsFieldName="labels"
+                annotationsFieldName="annotations"
+              />
             </div>
           </ScrollArea>
 
