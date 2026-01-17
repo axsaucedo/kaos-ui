@@ -703,6 +703,8 @@ class KubernetesClient {
       ...options,
       headers: {
         'Content-Type': 'application/json',
+        // FastMCP requires Accept header to include both application/json and text/event-stream
+        'Accept': 'application/json, text/event-stream',
         'X-Requested-With': 'XMLHttpRequest',
         'bypass-tunnel-reminder': '1',
         ...options.headers,
