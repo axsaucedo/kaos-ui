@@ -1,8 +1,9 @@
-import { Search, User, ExternalLink } from 'lucide-react';
+import { Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AutoRefreshControl } from './AutoRefreshControl';
 import { ConnectionStatus } from './ConnectionStatus';
+import { NamespaceSelector } from './NamespaceSelector';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export function Header() {
@@ -44,15 +45,9 @@ export function Header() {
           </a>
         </Button>
 
-        {/* User */}
-        <div className="flex items-center gap-2 pl-2 border-l border-border">
-          <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
-            <User className="h-4 w-4 text-primary" />
-          </div>
-          <div className="hidden md:block">
-            <p className="text-sm font-medium">Admin</p>
-            <p className="text-[10px] text-muted-foreground">kaos-system</p>
-          </div>
+        {/* Namespace Selector */}
+        <div className="flex items-center pl-2 border-l border-border">
+          <NamespaceSelector />
         </div>
       </div>
     </header>

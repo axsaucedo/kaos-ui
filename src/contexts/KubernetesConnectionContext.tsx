@@ -17,12 +17,15 @@ interface ConnectionState {
   lastRefresh: Date | null;
   namespace: string;
   baseUrl: string;
+  namespaces: string[];
 }
 
 interface KubernetesConnectionContextType extends ConnectionState {
   connect: (baseUrl: string, namespace?: string) => Promise<boolean>;
   disconnect: () => void;
   refreshAll: () => Promise<void>;
+  refreshNamespaces: () => Promise<void>;
+  switchNamespace: (namespace: string) => Promise<void>;
   startPolling: (intervalOverride?: number) => void;
   stopPolling: () => void;
   // CRUD operations
@@ -47,6 +50,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     lastRefresh: null,
     namespace: 'default',
     baseUrl: '',
+    namespaces: [],
   });
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -79,8 +83,8 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     store.setIsRefreshing(true);
 
     try {
-      // Fetch all resources in parallel
-      const [modelAPIs, mcpServers, agents, pods, deployments, pvcs, services] = await Promise.all([
+      // Fetch all resources in parallel (including namespaces)
+      const [modelAPIs, mcpServers, agents, pods, deployments, pvcs, services, namespacesList] = await Promise.all([
         k8sClient.listModelAPIs().catch((e) => { console.error('ModelAPIs error:', e); return []; }),
         k8sClient.listMCPServers().catch((e) => { console.error('MCPServers error:', e); return []; }),
         k8sClient.listAgents().catch((e) => { console.error('Agents error:', e); return []; }),
@@ -88,6 +92,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
         k8sClient.listDeployments().catch((e) => { console.error('Deployments error:', e); return []; }),
         k8sClient.listPVCs().catch((e) => { console.error('PVCs error:', e); return []; }),
         k8sClient.listServices().catch((e) => { console.error('Services error:', e); return []; }),
+        k8sClient.listNamespaces().catch((e) => { console.error('Namespaces error:', e); return []; }),
       ]);
 
       console.log('[KubernetesConnectionContext] Fetched:', {
@@ -109,10 +114,14 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       store.setPVCs(pvcs);
       store.setServices(services);
 
+      // Update namespaces
+      const namespaceNames = namespacesList.map((ns: { metadata: { name: string } }) => ns.metadata.name);
+
       setState(s => ({
         ...s,
         error: null,
         lastRefresh: new Date(),
+        namespaces: namespaceNames.length > 0 ? namespaceNames : s.namespaces,
       }));
 
       addLogEntry('info', `Synced: ${modelAPIs.length} ModelAPIs, ${mcpServers.length} MCPServers, ${agents.length} Agents`, 'connection');
@@ -187,6 +196,15 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
         
         addLogEntry('info', `Connected to Kubernetes ${result.version}`, 'connection');
         
+        // Fetch namespaces
+        try {
+          const nsList = await k8sClient.listNamespaces();
+          const namespaceNames = nsList.map(ns => ns.metadata.name);
+          setState(s => ({ ...s, namespaces: namespaceNames }));
+        } catch (e) {
+          console.warn('[KubernetesConnectionContext] Could not fetch namespaces:', e);
+        }
+        
         // Fetch resources immediately
         await refreshAll();
         
@@ -216,6 +234,36 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     }
   }, [refreshAll, startPolling, addLogEntry]);
 
+  // Refresh namespaces
+  const refreshNamespaces = useCallback(async () => {
+    if (!k8sClient.isConfigured()) return;
+    
+    try {
+      const nsList = await k8sClient.listNamespaces();
+      const namespaceNames = nsList.map(ns => ns.metadata.name);
+      setState(s => ({ ...s, namespaces: namespaceNames }));
+      console.log('[KubernetesConnectionContext] Refreshed namespaces:', namespaceNames.length);
+    } catch (error) {
+      console.warn('[KubernetesConnectionContext] Failed to fetch namespaces:', error);
+    }
+  }, []);
+
+  // Switch namespace
+  const switchNamespace = useCallback(async (newNamespace: string) => {
+    if (!state.connected || !state.baseUrl) return;
+    
+    console.log('[KubernetesConnectionContext] Switching to namespace:', newNamespace);
+    k8sClient.setConfig({ baseUrl: state.baseUrl, namespace: newNamespace });
+    setState(s => ({ ...s, namespace: newNamespace }));
+    
+    // Save to localStorage
+    localStorage.setItem('k8s-config', JSON.stringify({ baseUrl: state.baseUrl, namespace: newNamespace }));
+    
+    // Refresh resources for new namespace
+    await refreshAll();
+    addLogEntry('info', `Switched to namespace ${newNamespace}`, 'connection');
+  }, [state.connected, state.baseUrl, refreshAll, addLogEntry]);
+
   // Disconnect
   const disconnect = useCallback(() => {
     console.log('[KubernetesConnectionContext] Disconnecting');
@@ -229,6 +277,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       lastRefresh: null,
       namespace: 'default',
       baseUrl: '',
+      namespaces: [],
     });
 
     // Clear store
@@ -327,6 +376,8 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     connect,
     disconnect,
     refreshAll,
+    refreshNamespaces,
+    switchNamespace,
     startPolling,
     stopPolling,
     createModelAPI,

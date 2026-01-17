@@ -16,22 +16,27 @@ export function ConnectionSettings() {
   const { toast } = useToast();
   const k8sConnection = useKubernetesConnection();
   
-  const [baseUrl, setBaseUrl] = useState('');
+  const DEFAULT_URL = 'http://localhost:8010';
+  
+  const [baseUrl, setBaseUrl] = useState(DEFAULT_URL);
   const [namespace, setNamespace] = useState('default');
   const [namespaces, setNamespaces] = useState<string[]>([]);
   const [version, setVersion] = useState<string | null>(null);
 
-  // Load saved config on mount
+  // Load saved config on mount (or use default)
   useEffect(() => {
     const savedConfig = localStorage.getItem('k8s-config');
     if (savedConfig) {
       try {
         const config = JSON.parse(savedConfig);
-        setBaseUrl(config.baseUrl || '');
+        setBaseUrl(config.baseUrl || DEFAULT_URL);
         setNamespace(config.namespace || 'default');
       } catch (e) {
         console.error('Failed to parse saved config:', e);
+        setBaseUrl(DEFAULT_URL);
       }
+    } else {
+      setBaseUrl(DEFAULT_URL);
     }
   }, []);
 
@@ -136,7 +141,7 @@ export function ConnectionSettings() {
             Kubernetes Connection
           </CardTitle>
           <CardDescription>
-            Connect to your Kubernetes cluster via kubectl proxy + ngrok tunnel
+            Connect to your Kubernetes cluster via kubectl proxy
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -181,17 +186,17 @@ export function ConnectionSettings() {
 
           {/* API URL Input */}
           <div className="space-y-2">
-            <Label htmlFor="baseUrl">Kubernetes API URL (ngrok)</Label>
+            <Label htmlFor="baseUrl">Kubernetes API URL</Label>
             <Input
               id="baseUrl"
-              placeholder="https://xxxx.ngrok-free.app"
+              placeholder="http://localhost:8010"
               value={baseUrl}
               onChange={(e) => setBaseUrl(e.target.value)}
               disabled={connectionStatus === 'connected'}
             />
             <p className="text-xs text-muted-foreground">
-              Run <code className="bg-muted px-1 py-0.5 rounded">kubectl proxy --port=8001</code> then{' '}
-              <code className="bg-muted px-1 py-0.5 rounded">ngrok http 8001</code>
+              Run <code className="bg-muted px-1 py-0.5 rounded">kaos proxy --port=8010</code> or{' '}
+              <code className="bg-muted px-1 py-0.5 rounded">kubectl proxy --port=8010</code>
             </p>
           </div>
 
@@ -266,29 +271,26 @@ export function ConnectionSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <h4 className="font-medium">1. Start kubectl proxy</h4>
+            <h4 className="font-medium">1. Start the proxy</h4>
             <pre className="bg-muted p-3 rounded-md text-sm overflow-x-auto">
-              kubectl proxy --port=8001
+              kaos proxy --port=8010
             </pre>
+            <p className="text-xs text-muted-foreground">
+              Or use kubectl directly: <code className="bg-muted px-1 py-0.5 rounded">kubectl proxy --port=8010</code>
+            </p>
           </div>
           <div className="space-y-2">
-            <h4 className="font-medium">2. Start ngrok tunnel</h4>
-            <pre className="bg-muted p-3 rounded-md text-sm overflow-x-auto">
-              ngrok http 8001
-            </pre>
-          </div>
-          <div className="space-y-2">
-            <h4 className="font-medium">3. Copy the ngrok URL</h4>
+            <h4 className="font-medium">2. Connect</h4>
             <p className="text-sm text-muted-foreground">
-              Copy the <code className="bg-muted px-1 py-0.5 rounded">https://xxxx.ngrok-free.app</code> URL 
-              from ngrok and paste it above.
+              Enter the proxy URL above (default: <code className="bg-muted px-1 py-0.5 rounded">http://localhost:8010</code>) 
+              and click Connect.
             </p>
           </div>
           <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 mt-4">
             <h4 className="font-medium text-amber-600 mb-2">⚠️ CORS Limitation</h4>
             <p className="text-sm text-muted-foreground">
               <code>kubectl proxy</code> doesn't handle CORS preflight requests, so direct browser 
-              connections will fail. To fix this, enable Lovable Cloud and use an edge function proxy.
+              connections may fail. Use the kaos CLI proxy which includes CORS support.
             </p>
           </div>
         </CardContent>

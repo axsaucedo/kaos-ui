@@ -1,7 +1,7 @@
 /**
  * Real Kubernetes API Client
  * 
- * Connects to a Kubernetes cluster via kubectl proxy + ngrok tunnel
+ * Connects to a Kubernetes cluster via kubectl proxy or kaos CLI
  * Provides full CRUD operations for CRDs and standard K8s resources
  */
 
@@ -73,7 +73,8 @@ class KubernetesClient {
       headers['Content-Type'] = 'application/json';
     }
     
-    headers['ngrok-skip-browser-warning'] = '1';
+    // Headers to bypass tunnel warnings (for various proxy tools)
+    headers['X-Requested-With'] = 'XMLHttpRequest';
     headers['bypass-tunnel-reminder'] = '1';
     
     const response = await fetch(url, {
@@ -296,7 +297,7 @@ class KubernetesClient {
     
     const response = await fetch(`${this.config.baseUrl}${path}`, {
       headers: { 
-        'ngrok-skip-browser-warning': 'true',
+        'X-Requested-With': 'XMLHttpRequest',
         'bypass-tunnel-reminder': 'true',
       },
     });
@@ -487,7 +488,7 @@ class KubernetesClient {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'ngrok-skip-browser-warning': '1',
+        'X-Requested-With': 'XMLHttpRequest',
         'bypass-tunnel-reminder': '1',
         ...options.headers,
       },
