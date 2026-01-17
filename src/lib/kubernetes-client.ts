@@ -453,7 +453,68 @@ class KubernetesClient {
   // ============= MCP Server Tools Operations =============
   
   /**
-   * List available tools from an MCP server
+   * Parse a Kubernetes internal endpoint URL to extract service details
+   * Endpoint format: http://servicename.namespace.svc.cluster.local:port
+   */
+  private parseK8sEndpoint(endpoint: string): { serviceName: string; namespace: string; port: number } | null {
+    try {
+      const url = new URL(endpoint);
+      const host = url.hostname;
+      const port = parseInt(url.port) || 8000;
+      
+      // Parse host format: servicename.namespace.svc.cluster.local
+      const parts = host.split('.');
+      if (parts.length >= 2) {
+        return {
+          serviceName: parts[0],
+          namespace: parts[1],
+          port,
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * List available tools from an MCP server using endpoint from status
+   * Parses the internal K8s endpoint and uses the service proxy
+   * Uses GET /mcp/tools endpoint
+   */
+  async listMCPToolsFromEndpoint(
+    endpoint: string
+  ): Promise<{ tools: MCPTool[] }> {
+    const parsed = this.parseK8sEndpoint(endpoint);
+    if (!parsed) {
+      throw new Error(`Invalid MCP endpoint format: ${endpoint}`);
+    }
+    
+    console.log(`[k8sClient] Fetching MCP tools via proxy for service: ${parsed.serviceName} in ${parsed.namespace}`);
+    return this.listMCPTools(parsed.serviceName, parsed.namespace, parsed.port);
+  }
+
+  /**
+   * Call a tool on an MCP server using endpoint from status
+   * Parses the internal K8s endpoint and uses the service proxy
+   * Uses POST /mcp/tools endpoint with { name, args }
+   */
+  async callMCPToolFromEndpoint(
+    endpoint: string,
+    toolName: string,
+    args: Record<string, unknown>
+  ): Promise<MCPToolCallResult> {
+    const parsed = this.parseK8sEndpoint(endpoint);
+    if (!parsed) {
+      throw new Error(`Invalid MCP endpoint format: ${endpoint}`);
+    }
+    
+    console.log(`[k8sClient] Calling MCP tool via proxy for service: ${parsed.serviceName} in ${parsed.namespace}`);
+    return this.callMCPTool(parsed.serviceName, toolName, args, parsed.namespace, parsed.port);
+  }
+  
+  /**
+   * List available tools from an MCP server via K8s service proxy
    * Uses GET /mcp/tools endpoint
    */
   async listMCPTools(
@@ -478,7 +539,7 @@ class KubernetesClient {
   }
 
   /**
-   * Call a tool on an MCP server
+   * Call a tool on an MCP server via K8s service proxy
    * Uses POST /mcp/tools endpoint with { name, args }
    */
   async callMCPTool(

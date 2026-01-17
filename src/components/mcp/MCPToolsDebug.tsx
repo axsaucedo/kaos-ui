@@ -53,6 +53,8 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Use endpoint from MCPServer status, or construct service name as fallback
+  const endpoint = mcpServer.status?.endpoint;
   const serviceName = `mcpserver-${mcpServer.metadata.name}`;
   const namespace = mcpServer.metadata.namespace || 'default';
 
@@ -62,10 +64,19 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
     setToolsError(null);
     
     try {
-      console.log(`[MCPToolsDebug] Fetching tools from service: ${serviceName}`);
-      const response = await k8sClient.listMCPTools(serviceName, namespace);
-      console.log(`[MCPToolsDebug] Received tools:`, response);
-      setTools(response.tools || []);
+      if (endpoint) {
+        // Use direct endpoint from MCPServer status
+        console.log(`[MCPToolsDebug] Fetching tools from endpoint: ${endpoint}`);
+        const response = await k8sClient.listMCPToolsFromEndpoint(endpoint);
+        console.log(`[MCPToolsDebug] Received tools:`, response);
+        setTools(response.tools || []);
+      } else {
+        // Fallback to service proxy
+        console.log(`[MCPToolsDebug] Fetching tools from service: ${serviceName}`);
+        const response = await k8sClient.listMCPTools(serviceName, namespace);
+        console.log(`[MCPToolsDebug] Received tools:`, response);
+        setTools(response.tools || []);
+      }
     } catch (error) {
       console.error('[MCPToolsDebug] Error fetching tools:', error);
       setToolsError(error instanceof Error ? error.message : 'Failed to fetch tools');
@@ -73,7 +84,7 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
     } finally {
       setIsLoadingTools(false);
     }
-  }, [serviceName, namespace]);
+  }, [endpoint, serviceName, namespace]);
 
   // Fetch tools on mount
   useEffect(() => {
@@ -146,12 +157,14 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
 
     try {
       console.log(`[MCPToolsDebug] Calling tool: ${selectedTool.name} with args:`, parsedArgs);
-      const result = await k8sClient.callMCPTool(
-        serviceName,
-        selectedTool.name,
-        parsedArgs,
-        namespace
-      );
+      let result: MCPToolCallResult;
+      if (endpoint) {
+        // Use direct endpoint from MCPServer status
+        result = await k8sClient.callMCPToolFromEndpoint(endpoint, selectedTool.name, parsedArgs);
+      } else {
+        // Fallback to service proxy
+        result = await k8sClient.callMCPTool(serviceName, selectedTool.name, parsedArgs, namespace);
+      }
       console.log(`[MCPToolsDebug] Tool result:`, result);
       
       historyEntry.result = result;
