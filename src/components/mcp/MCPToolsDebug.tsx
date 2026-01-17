@@ -25,7 +25,6 @@ import {
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
 import { k8sClient } from '@/lib/kubernetes-client';
-import { MCPClient, createMCPClientFromEndpoint, createMCPClient } from '@/lib/mcp-client';
 import type { MCPServer } from '@/types/kubernetes';
 import type { MCPTool, MCPToolCallResult } from '@/types/mcp';
 
@@ -43,6 +42,102 @@ interface ToolCallHistory {
   duration: number;
 }
 
+// Simple MCP session state
+interface MCPSession {
+  sessionId: string | null;
+  initialized: boolean;
+}
+
+/**
+ * Parse SSE response to extract JSON data
+ */
+function parseSSEResponse(text: string): unknown {
+  const lines = text.split('\n');
+  for (const line of lines) {
+    if (line.startsWith('data: ')) {
+      const data = line.slice(6).trim();
+      if (data && data !== '[DONE]') {
+        return JSON.parse(data);
+      }
+    } else if (line.startsWith('data:')) {
+      const data = line.slice(5).trim();
+      if (data && data !== '[DONE]') {
+        return JSON.parse(data);
+      }
+    }
+  }
+  throw new Error(`Could not parse SSE response: ${text.substring(0, 200)}`);
+}
+
+/**
+ * Simple MCP HTTP request helper
+ */
+async function mcpRequest<T>(
+  baseUrl: string,
+  method: string,
+  params: Record<string, unknown> = {},
+  session: MCPSession | null = null,
+  isNotification: boolean = false
+): Promise<{ data: T; sessionId: string | null }> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/event-stream',
+    'X-Requested-With': 'XMLHttpRequest',
+    'bypass-tunnel-reminder': '1',
+  };
+
+  if (session?.sessionId) {
+    headers['Mcp-Session-Id'] = session.sessionId;
+  }
+
+  const body: Record<string, unknown> = {
+    jsonrpc: '2.0',
+    method,
+    params,
+  };
+
+  if (!isNotification) {
+    body.id = Date.now();
+  }
+
+  const response = await fetch(baseUrl, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  const sessionId = response.headers.get('mcp-session-id');
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`HTTP ${response.status}: ${errorText}`);
+  }
+
+  if (response.status === 202 || isNotification) {
+    return { data: {} as T, sessionId };
+  }
+
+  const responseText = await response.text();
+  const contentType = response.headers.get('content-type') || '';
+  
+  let data: T;
+  if (contentType.includes('text/event-stream') || responseText.includes('data:')) {
+    const parsed = parseSSEResponse(responseText) as { result?: T; error?: { code: number; message: string } };
+    if (parsed && typeof parsed === 'object' && 'error' in parsed && parsed.error) {
+      throw new Error(`MCP error ${parsed.error.code}: ${parsed.error.message}`);
+    }
+    data = (parsed as { result: T }).result || parsed as T;
+  } else {
+    const parsed = JSON.parse(responseText) as { result?: T; error?: { code: number; message: string } };
+    if (parsed.error) {
+      throw new Error(`MCP error ${parsed.error.code}: ${parsed.error.message}`);
+    }
+    data = parsed.result || parsed as T;
+  }
+
+  return { data, sessionId };
+}
+
 export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
   const [tools, setTools] = useState<MCPTool[]>([]);
   const [isLoadingTools, setIsLoadingTools] = useState(false);
@@ -54,74 +149,95 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  // Use endpoint from MCPServer status, or construct service name as fallback
-  const endpoint = mcpServer.status?.endpoint;
-  const serviceName = `mcpserver-${mcpServer.metadata.name}`;
-  const namespace = mcpServer.metadata.namespace || 'default';
-
-  // Create and persist MCP client
-  const mcpClientRef = useRef<MCPClient | null>(null);
-
-  // Get or create MCP client
-  const getMCPClient = useCallback(() => {
-    if (!mcpClientRef.current) {
-      const k8sBaseUrl = k8sClient.getConfig().baseUrl;
-      if (!k8sBaseUrl) {
-        throw new Error('Kubernetes API not configured');
-      }
-      
-      if (endpoint) {
-        console.log(`[MCPToolsDebug] Creating MCP client from endpoint: ${endpoint}`);
-        mcpClientRef.current = createMCPClientFromEndpoint(k8sBaseUrl, endpoint);
-      } else {
-        console.log(`[MCPToolsDebug] Creating MCP client for service: ${serviceName}`);
-        mcpClientRef.current = createMCPClient(k8sBaseUrl, serviceName, namespace);
-      }
+  // Session state
+  const sessionRef = useRef<MCPSession | null>(null);
+  
+  // Build MCP URL from K8s proxy
+  const getMCPUrl = useCallback(() => {
+    const k8sBaseUrl = k8sClient.getConfig().baseUrl;
+    if (!k8sBaseUrl) throw new Error('Kubernetes API not configured');
+    
+    const endpoint = mcpServer.status?.endpoint;
+    const namespace = mcpServer.metadata.namespace || 'default';
+    
+    if (endpoint) {
+      // Parse endpoint like http://service.namespace.svc.cluster.local:8000
+      const url = new URL(endpoint);
+      const parts = url.hostname.split('.');
+      const serviceName = parts[0];
+      const ns = parts[1] || namespace;
+      const port = url.port || '8000';
+      return `${k8sBaseUrl}/api/v1/namespaces/${ns}/services/${serviceName}:${port}/proxy/mcp`;
     }
-    return mcpClientRef.current;
-  }, [endpoint, serviceName, namespace]);
+    
+    const serviceName = `mcpserver-${mcpServer.metadata.name}`;
+    return `${k8sBaseUrl}/api/v1/namespaces/${namespace}/services/${serviceName}:8000/proxy/mcp`;
+  }, [mcpServer]);
 
-  // Reset client when server changes
-  useEffect(() => {
-    mcpClientRef.current = null;
-  }, [endpoint, serviceName, namespace]);
-
-  // Fetch available tools using the new MCP client
+  // Initialize session and fetch tools
   const fetchTools = useCallback(async () => {
     setIsLoadingTools(true);
     setToolsError(null);
     
     try {
-      const client = getMCPClient();
-      console.log(`[MCPToolsDebug] Fetching tools using MCPClient`);
-      const toolsList = await client.listTools();
-      console.log(`[MCPToolsDebug] Received tools:`, toolsList);
-      setTools(toolsList || []);
+      const mcpUrl = getMCPUrl();
+      
+      // Step 1: Initialize
+      const initResult = await mcpRequest<{ protocolVersion: string }>(
+        mcpUrl,
+        'initialize',
+        {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'kaos-ui', version: '1.0.0' },
+        }
+      );
+      
+      sessionRef.current = {
+        sessionId: initResult.sessionId,
+        initialized: false,
+      };
+      
+      // Step 2: Send initialized notification
+      await mcpRequest(
+        mcpUrl,
+        'notifications/initialized',
+        {},
+        sessionRef.current,
+        true
+      );
+      sessionRef.current.initialized = true;
+      
+      // Step 3: List tools
+      const { data } = await mcpRequest<{ tools: MCPTool[] }>(
+        mcpUrl,
+        'tools/list',
+        {},
+        sessionRef.current
+      );
+      
+      setTools(data.tools || []);
     } catch (error) {
-      console.error('[MCPToolsDebug] Error fetching tools:', error);
+      console.error('[MCPToolsDebug] Error:', error);
       setToolsError(error instanceof Error ? error.message : 'Failed to fetch tools');
       setTools([]);
-      // Reset client on error to force re-initialization
-      mcpClientRef.current = null;
+      sessionRef.current = null;
     } finally {
       setIsLoadingTools(false);
     }
-  }, [getMCPClient]);
+  }, [getMCPUrl]);
 
   // Fetch tools on mount
   useEffect(() => {
     fetchTools();
   }, [fetchTools]);
 
-  // Helper to get tool schema (inputSchema for FastMCP, parameters for legacy)
-  const getToolSchema = (tool: MCPTool) => {
-    return tool.inputSchema || tool.parameters;
-  };
+  // Helper to get tool schema
+  const getToolSchema = (tool: MCPTool) => tool.inputSchema || tool.parameters;
 
   // Handle tool selection
   const handleSelectTool = (tool: MCPTool) => {
     setSelectedTool(tool);
-    // Initialize args with empty values
     const initialArgs: Record<string, string> = {};
     const schema = getToolSchema(tool);
     if (schema?.properties) {
@@ -151,7 +267,6 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
           return;
         }
         
-        // Type conversion based on parameter definition
         switch (paramDef.type) {
           case 'integer':
           case 'number':
@@ -185,15 +300,17 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
     };
 
     try {
-      console.log(`[MCPToolsDebug] Calling tool: ${selectedTool.name} with args:`, parsedArgs);
-      const client = getMCPClient();
-      const result = await client.callTool(selectedTool.name, parsedArgs);
-      console.log(`[MCPToolsDebug] Tool result:`, result);
+      const mcpUrl = getMCPUrl();
+      const { data } = await mcpRequest<MCPToolCallResult>(
+        mcpUrl,
+        'tools/call',
+        { name: selectedTool.name, arguments: parsedArgs },
+        sessionRef.current
+      );
       
-      historyEntry.result = result;
+      historyEntry.result = data;
       historyEntry.duration = Date.now() - startTime;
     } catch (error) {
-      console.error('[MCPToolsDebug] Tool call error:', error);
       historyEntry.error = error instanceof Error ? error.message : 'Unknown error';
       historyEntry.duration = Date.now() - startTime;
     } finally {
@@ -241,7 +358,7 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2">
           <Wrench className="h-4 w-4 text-mcpserver" />
-          <span className="text-sm font-medium">Tools Debugger</span>
+          <span className="text-sm font-medium">Tools</span>
           {tools.length > 0 && (
             <Badge variant="secondary" className="text-xs">
               {tools.length} tools
@@ -454,86 +571,61 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
                       </>
                     )}
                   </Button>
-                </div>
 
-                {/* Call History */}
-                {callHistory.length > 0 && (
-                  <div className="mt-6">
-                    <h4 className="text-sm font-medium mb-3">Call History</h4>
-                    <div className="space-y-3">
-                      {callHistory.map((call) => (
-                        <div
-                          key={call.id}
-                          className="rounded-lg border border-border bg-muted/20 overflow-hidden"
-                        >
-                          <div className="px-3 py-2 border-b border-border bg-muted/30 flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              {call.error ? (
-                                <AlertCircle className="h-4 w-4 text-destructive" />
-                              ) : (
-                                <CheckCircle2 className="h-4 w-4 text-green-500" />
-                              )}
-                              <code className="text-xs font-mono">{call.toolName}</code>
-                              <span className="text-xs text-muted-foreground">
-                                {call.duration}ms
-                              </span>
-                            </div>
-                            <span className="text-xs text-muted-foreground">
-                              {call.timestamp.toLocaleTimeString()}
-                            </span>
-                          </div>
-                          <div className="p-3 space-y-2">
-                            <div>
-                              <span className="text-xs text-muted-foreground">Arguments:</span>
-                              <pre className="text-xs font-mono bg-background p-2 rounded mt-1 overflow-auto max-h-20">
-                                {JSON.stringify(call.args, null, 2)}
-                              </pre>
-                            </div>
-                            <div>
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-muted-foreground">
-                                  {call.error ? 'Error:' : 'Result:'}
-                                </span>
+                  {/* Call History */}
+                  {callHistory.length > 0 && (
+                    <div className="mt-6">
+                      <h4 className="text-sm font-medium mb-3">Call History</h4>
+                      <div className="space-y-2">
+                        {callHistory.map((entry) => (
+                          <div
+                            key={entry.id}
+                            className="rounded-lg border border-border p-3 bg-muted/20"
+                          >
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {entry.error ? (
+                                  <AlertCircle className="h-4 w-4 text-destructive" />
+                                ) : (
+                                  <CheckCircle2 className="h-4 w-4 text-green-500" />
+                                )}
+                                <span className="font-mono text-sm">{entry.toolName}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <span>{entry.duration}ms</span>
                                 <Button
                                   variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2"
+                                  size="icon"
+                                  className="h-6 w-6"
                                   onClick={() => handleCopyResult(
-                                    call.id,
-                                    call.error || JSON.stringify(call.result, null, 2)
+                                    entry.id,
+                                    JSON.stringify(entry.result || entry.error, null, 2)
                                   )}
                                 >
-                                  {copiedId === call.id ? (
-                                    <Check className="h-3 w-3 text-green-500" />
+                                  {copiedId === entry.id ? (
+                                    <Check className="h-3 w-3" />
                                   ) : (
                                     <Copy className="h-3 w-3" />
                                   )}
                                 </Button>
                               </div>
-                              <pre className={`text-xs font-mono p-2 rounded mt-1 overflow-auto max-h-32 ${
-                                call.error ? 'bg-destructive/10 text-destructive' : 'bg-background'
-                              }`}>
-                                {call.error || JSON.stringify(call.result, null, 2)}
-                              </pre>
                             </div>
+                            <pre className="text-xs bg-background rounded p-2 overflow-auto max-h-32">
+                              {entry.error || JSON.stringify(entry.result, null, 2)}
+                            </pre>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             </>
           ) : (
             <div className="flex-1 flex items-center justify-center">
-              <div className="text-center px-4">
-                <Wrench className="h-12 w-12 text-muted-foreground/30 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-muted-foreground mb-2">
-                  Select a Tool
-                </h3>
-                <p className="text-sm text-muted-foreground max-w-sm">
-                  Choose a tool from the list to view its parameters and make test calls.
-                </p>
+              <div className="text-center">
+                <Wrench className="h-12 w-12 text-muted-foreground/20 mx-auto mb-3" />
+                <p className="text-sm text-muted-foreground">Select a tool to get started</p>
               </div>
             </div>
           )}
