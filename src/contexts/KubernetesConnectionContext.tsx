@@ -398,10 +398,40 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
   );
 }
 
+// Default fallback for when context is unavailable (e.g., during hot reload)
+const defaultContextValue: KubernetesConnectionContextType = {
+  connected: false,
+  connecting: false,
+  error: null,
+  lastRefresh: null,
+  namespace: 'default',
+  baseUrl: '',
+  namespaces: [],
+  connect: async () => false,
+  disconnect: () => {},
+  refreshAll: async () => {},
+  refreshNamespaces: async () => {},
+  switchNamespace: async () => {},
+  startPolling: () => {},
+  stopPolling: () => {},
+  createModelAPI: async (api) => api,
+  updateModelAPI: async (api) => api,
+  deleteModelAPI: async () => {},
+  createMCPServer: async (server) => server,
+  updateMCPServer: async (server) => server,
+  deleteMCPServer: async () => {},
+  createAgent: async (agent) => agent,
+  updateAgent: async (agent) => agent,
+  deleteAgent: async () => {},
+};
+
 export function useKubernetesConnection() {
   const context = useContext(KubernetesConnectionContext);
+  // Return fallback during HMR or if context is unavailable
+  // This prevents crashes during React Fast Refresh
   if (!context) {
-    throw new Error('useKubernetesConnection must be used within KubernetesConnectionProvider');
+    console.warn('[useKubernetesConnection] Context unavailable, using fallback. This may happen during hot reload.');
+    return defaultContextValue;
   }
   return context;
 }
