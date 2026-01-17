@@ -514,8 +514,51 @@ class KubernetesClient {
   }
   
   /**
+   * Parse SSE response to extract JSON-RPC messages
+   */
+  private async parseSSEResponse(response: Response): Promise<unknown> {
+    const text = await response.text();
+    console.log(`[k8sClient] Raw SSE response:`, text);
+    
+    // Parse SSE format: "event: message\ndata: {...}\n\n"
+    const lines = text.split('\n');
+    let jsonData = null;
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('data:')) {
+        const data = trimmed.slice(5).trim();
+        if (data && data !== '[DONE]') {
+          try {
+            jsonData = JSON.parse(data);
+          } catch {
+            // Continue to next line
+          }
+        }
+      }
+    }
+    
+    return jsonData;
+  }
+
+  /**
+   * Parse response based on Content-Type (JSON or SSE)
+   */
+  private async parseMCPResponse(response: Response): Promise<unknown> {
+    const contentType = response.headers.get('Content-Type') || '';
+    console.log(`[k8sClient] Response Content-Type:`, contentType);
+    
+    if (contentType.includes('text/event-stream')) {
+      return this.parseSSEResponse(response);
+    } else {
+      return response.json();
+    }
+  }
+
+  /**
    * Initialize an MCP session and get the session ID
    * FastMCP requires initialization before any other requests
+   * Handles both JSON and SSE response formats
    */
   async initializeMCPSession(
     serviceName: string,
@@ -554,21 +597,26 @@ class KubernetesClient {
       throw new Error(`MCP session initialization error ${response.status}: ${errorText}`);
     }
     
-    // Get session ID from response header
+    // Get session ID from response header (primary method)
     const sessionId = response.headers.get('Mcp-Session-Id');
     
-    if (!sessionId) {
-      // Some implementations return session ID in body
-      const body = await response.json();
-      console.log(`[k8sClient] MCP initialize response:`, body);
-      if (body.result?.sessionId) {
-        return body.result.sessionId;
-      }
-      throw new Error('MCP server did not return a session ID');
+    if (sessionId) {
+      console.log(`[k8sClient] MCP session initialized from header:`, sessionId);
+      // Consume the response body
+      await this.parseMCPResponse(response);
+      return sessionId;
     }
     
-    console.log(`[k8sClient] MCP session initialized:`, sessionId);
-    return sessionId;
+    // Fallback: try to get session ID from response body
+    const body = await this.parseMCPResponse(response) as { result?: { sessionId?: string } } | null;
+    console.log(`[k8sClient] MCP initialize response body:`, body);
+    
+    if (body?.result?.sessionId) {
+      return body.result.sessionId;
+    }
+    
+    // If no session ID anywhere, throw error
+    throw new Error('MCP server did not return a session ID. Check if the server supports the streamable HTTP transport.');
   }
 
   /**
@@ -611,8 +659,12 @@ class KubernetesClient {
       throw new Error(`MCP tools list error ${response.status}: ${errorText}`);
     }
     
-    const jsonRpcResponse = await response.json();
+    const jsonRpcResponse = await this.parseMCPResponse(response) as { error?: { message?: string }; result?: { tools?: MCPTool[] } } | null;
     console.log(`[k8sClient] JSON-RPC tools/list response:`, jsonRpcResponse);
+    
+    if (!jsonRpcResponse) {
+      throw new Error('MCP server returned empty response for tools/list');
+    }
     
     // Handle JSON-RPC response format
     if (jsonRpcResponse.error) {
@@ -621,7 +673,7 @@ class KubernetesClient {
     
     // The result contains the tools list - format: { tools: [...] }
     const result = jsonRpcResponse.result || jsonRpcResponse;
-    return { tools: result.tools || [] };
+    return { tools: (result as { tools?: MCPTool[] }).tools || [] };
   }
 
   /**
@@ -669,8 +721,12 @@ class KubernetesClient {
       throw new Error(`MCP tool call error ${response.status}: ${errorText}`);
     }
     
-    const jsonRpcResponse = await response.json();
+    const jsonRpcResponse = await this.parseMCPResponse(response) as { error?: { message?: string }; result?: unknown } | null;
     console.log(`[k8sClient] JSON-RPC tools/call response:`, jsonRpcResponse);
+    
+    if (!jsonRpcResponse) {
+      throw new Error('MCP server returned empty response for tools/call');
+    }
     
     // Handle JSON-RPC response format
     if (jsonRpcResponse.error) {
@@ -678,7 +734,7 @@ class KubernetesClient {
     }
     
     // Return the result from the JSON-RPC response
-    return jsonRpcResponse.result || jsonRpcResponse;
+    return (jsonRpcResponse.result || jsonRpcResponse) as MCPToolCallResult;
   }
 
   /**
