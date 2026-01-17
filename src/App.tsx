@@ -12,6 +12,9 @@ import PodLogs from "./pages/PodLogs";
 
 const queryClient = new QueryClient();
 
+// Get basename for GitHub Pages deployment
+const basename = import.meta.env.BASE_URL;
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
@@ -19,7 +22,7 @@ const App = () => (
         <Toaster />
         <Sonner />
         <KubernetesConnectionProvider>
-          <BrowserRouter>
+          <BrowserRouter basename={basename}>
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/agents/:namespace/:name" element={<AgentDetail />} />

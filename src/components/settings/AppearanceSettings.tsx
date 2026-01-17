@@ -1,11 +1,18 @@
 import { useTheme } from 'next-themes';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { Sun, Moon, Monitor } from 'lucide-react';
 
 export function AppearanceSettings() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const themes = [
     {
@@ -27,6 +34,8 @@ export function AppearanceSettings() {
       description: 'Follow system preferences',
     },
   ];
+
+  const currentTheme = theme === 'system' ? resolvedTheme : theme;
 
   return (
     <div className="space-y-6 max-w-2xl">
