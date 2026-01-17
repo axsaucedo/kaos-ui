@@ -556,15 +556,15 @@ class KubernetesClient {
   }
 
   /**
-   * Initialize an MCP session and get the session ID
-   * FastMCP requires initialization before any other requests
-   * Handles both JSON and SSE response formats
+   * Initialize an MCP session and get the session ID (optional per spec)
+   * Per MCP Streamable HTTP spec: session ID is OPTIONAL
+   * After initialization, we must send 'notifications/initialized' before other requests
    */
   async initializeMCPSession(
     serviceName: string,
     namespace?: string,
     port: number = 8000
-  ): Promise<string> {
+  ): Promise<string | null> {
     const initRequest = {
       jsonrpc: '2.0',
       id: Date.now(),
@@ -597,37 +597,89 @@ class KubernetesClient {
       throw new Error(`MCP session initialization error ${response.status}: ${errorText}`);
     }
     
-    // Get session ID from response header (primary method)
+    // Get session ID from response header (optional per MCP spec)
     const sessionId = response.headers.get('Mcp-Session-Id');
     
-    if (sessionId) {
-      console.log(`[k8sClient] MCP session initialized from header:`, sessionId);
-      // Consume the response body
-      await this.parseMCPResponse(response);
-      return sessionId;
-    }
-    
-    // Fallback: try to get session ID from response body
-    const body = await this.parseMCPResponse(response) as { result?: { sessionId?: string } } | null;
+    // Consume the response body
+    const body = await this.parseMCPResponse(response);
     console.log(`[k8sClient] MCP initialize response body:`, body);
     
-    if (body?.result?.sessionId) {
-      return body.result.sessionId;
+    if (sessionId) {
+      console.log(`[k8sClient] MCP session initialized with ID:`, sessionId);
+    } else {
+      console.log(`[k8sClient] MCP server running in stateless mode (no session ID)`);
     }
     
-    // If no session ID anywhere, throw error
-    throw new Error('MCP server did not return a session ID. Check if the server supports the streamable HTTP transport.');
+    // Send 'notifications/initialized' as required by the protocol
+    await this.sendMCPInitializedNotification(serviceName, namespace, port, sessionId);
+    
+    // Return session ID if provided, null for stateless servers
+    return sessionId;
+  }
+
+  /**
+   * Send the 'notifications/initialized' notification after initialization
+   * This is required by the MCP protocol before any other requests
+   */
+  private async sendMCPInitializedNotification(
+    serviceName: string,
+    namespace?: string,
+    port: number = 8000,
+    sessionId: string | null = null
+  ): Promise<void> {
+    const notification = {
+      jsonrpc: '2.0',
+      method: 'notifications/initialized',
+    };
+    
+    console.log(`[k8sClient] Sending initialized notification to ${serviceName}`);
+    
+    const headers: Record<string, string> = {};
+    if (sessionId) {
+      headers['Mcp-Session-Id'] = sessionId;
+    }
+    
+    const response = await this.proxyServiceRequest(
+      serviceName,
+      '/mcp',
+      {
+        method: 'POST',
+        body: JSON.stringify(notification),
+        headers,
+      },
+      namespace,
+      port
+    );
+    
+    // Per spec, server should return 202 Accepted for notifications
+    if (!response.ok && response.status !== 202) {
+      console.warn(`[k8sClient] Initialized notification returned status ${response.status}`);
+    }
+    
+    // Consume response body if any
+    try {
+      await response.text();
+    } catch {
+      // Ignore
+    }
+    
+    console.log(`[k8sClient] Initialized notification sent successfully`);
   }
 
   /**
    * List available tools from an MCP server via K8s service proxy
-   * Supports both stateless HTTP transport (no session) and stateful (with session)
+   * Follows MCP Streamable HTTP protocol: initialize → initialized notification → request
    */
   async listMCPTools(
     serviceName: string,
     namespace?: string,
     port: number = 8000
   ): Promise<{ tools: MCPTool[] }> {
+    // Step 1: Initialize session (handles both stateful and stateless servers)
+    console.log(`[k8sClient] Initializing MCP connection for tools/list to ${serviceName}`);
+    const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
+    
+    // Step 2: Make the tools/list request
     const jsonRpcRequest = {
       jsonrpc: '2.0',
       id: Date.now(),
@@ -637,13 +689,18 @@ class KubernetesClient {
     
     console.log(`[k8sClient] Sending JSON-RPC tools/list to ${serviceName}:`, jsonRpcRequest);
     
-    // Try direct request first (stateless HTTP transport)
+    const headers: Record<string, string> = {};
+    if (sessionId) {
+      headers['Mcp-Session-Id'] = sessionId;
+    }
+    
     const response = await this.proxyServiceRequest(
       serviceName,
       '/mcp',
       {
         method: 'POST',
         body: JSON.stringify(jsonRpcRequest),
+        headers,
       },
       namespace,
       port
@@ -651,47 +708,6 @@ class KubernetesClient {
     
     if (!response.ok) {
       const errorText = await response.text();
-      
-      // Check if server requires session (stateful mode)
-      if (errorText.includes('session') || errorText.includes('Session')) {
-        console.log(`[k8sClient] Server requires session, initializing...`);
-        const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
-        
-        // Retry with session
-        const retryResponse = await this.proxyServiceRequest(
-          serviceName,
-          '/mcp',
-          {
-            method: 'POST',
-            body: JSON.stringify(jsonRpcRequest),
-            headers: {
-              'Mcp-Session-Id': sessionId,
-            },
-          },
-          namespace,
-          port
-        );
-        
-        if (!retryResponse.ok) {
-          const retryError = await retryResponse.text();
-          throw new Error(`MCP tools list error ${retryResponse.status}: ${retryError}`);
-        }
-        
-        const jsonRpcResponse = await this.parseMCPResponse(retryResponse) as { error?: { message?: string }; result?: { tools?: MCPTool[] } } | null;
-        console.log(`[k8sClient] JSON-RPC tools/list response (with session):`, jsonRpcResponse);
-        
-        if (!jsonRpcResponse) {
-          throw new Error('MCP server returned empty response for tools/list');
-        }
-        
-        if (jsonRpcResponse.error) {
-          throw new Error(`MCP JSON-RPC error: ${jsonRpcResponse.error.message || JSON.stringify(jsonRpcResponse.error)}`);
-        }
-        
-        const result = jsonRpcResponse.result || jsonRpcResponse;
-        return { tools: (result as { tools?: MCPTool[] }).tools || [] };
-      }
-      
       throw new Error(`MCP tools list error ${response.status}: ${errorText}`);
     }
     
@@ -714,7 +730,7 @@ class KubernetesClient {
 
   /**
    * Call a tool on an MCP server via K8s service proxy
-   * Supports both stateless HTTP transport (no session) and stateful (with session)
+   * Follows MCP Streamable HTTP protocol: initialize → initialized notification → request
    */
   async callMCPTool(
     serviceName: string,
@@ -723,6 +739,11 @@ class KubernetesClient {
     namespace?: string,
     port: number = 8000
   ): Promise<MCPToolCallResult> {
+    // Step 1: Initialize session (handles both stateful and stateless servers)
+    console.log(`[k8sClient] Initializing MCP connection for tools/call to ${serviceName}`);
+    const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
+    
+    // Step 2: Make the tools/call request
     const jsonRpcRequest = {
       jsonrpc: '2.0',
       id: Date.now(),
@@ -735,13 +756,18 @@ class KubernetesClient {
     
     console.log(`[k8sClient] Sending JSON-RPC tools/call to ${serviceName}:`, jsonRpcRequest);
     
-    // Try direct request first (stateless HTTP transport)
+    const headers: Record<string, string> = {};
+    if (sessionId) {
+      headers['Mcp-Session-Id'] = sessionId;
+    }
+    
     const response = await this.proxyServiceRequest(
       serviceName,
       '/mcp',
       {
         method: 'POST',
         body: JSON.stringify(jsonRpcRequest),
+        headers,
       },
       namespace,
       port
@@ -749,46 +775,6 @@ class KubernetesClient {
     
     if (!response.ok) {
       const errorText = await response.text();
-      
-      // Check if server requires session (stateful mode)
-      if (errorText.includes('session') || errorText.includes('Session')) {
-        console.log(`[k8sClient] Server requires session for tool call, initializing...`);
-        const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
-        
-        // Retry with session
-        const retryResponse = await this.proxyServiceRequest(
-          serviceName,
-          '/mcp',
-          {
-            method: 'POST',
-            body: JSON.stringify(jsonRpcRequest),
-            headers: {
-              'Mcp-Session-Id': sessionId,
-            },
-          },
-          namespace,
-          port
-        );
-        
-        if (!retryResponse.ok) {
-          const retryError = await retryResponse.text();
-          throw new Error(`MCP tool call error ${retryResponse.status}: ${retryError}`);
-        }
-        
-        const jsonRpcResponse = await this.parseMCPResponse(retryResponse) as { error?: { message?: string }; result?: unknown } | null;
-        console.log(`[k8sClient] JSON-RPC tools/call response (with session):`, jsonRpcResponse);
-        
-        if (!jsonRpcResponse) {
-          throw new Error('MCP server returned empty response for tools/call');
-        }
-        
-        if (jsonRpcResponse.error) {
-          throw new Error(`MCP JSON-RPC error: ${jsonRpcResponse.error.message || JSON.stringify(jsonRpcResponse.error)}`);
-        }
-        
-        return (jsonRpcResponse.result || jsonRpcResponse) as MCPToolCallResult;
-      }
-      
       throw new Error(`MCP tool call error ${response.status}: ${errorText}`);
     }
     
