@@ -100,7 +100,9 @@ function MCPServerNode({ data, selected }: { data: NodeData; selected: boolean }
       </div>
       <div className="space-y-1 text-xs text-muted-foreground">
         {resource.spec.type && <p>Type: <span className="text-foreground">{resource.spec.type}</span></p>}
-        <p>MCP: <span className="text-foreground font-mono">{resource.spec.config?.mcp}</span></p>
+        <p>Tools: <span className="text-foreground font-mono">
+          {resource.spec.config?.tools?.fromPackage || resource.spec.config?.tools?.fromString?.slice(0, 20) || 'N/A'}
+        </span></p>
         {resource.status?.availableTools && resource.status.availableTools.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
             {resource.status.availableTools.slice(0, 3).map(tool => (
@@ -245,14 +247,14 @@ function ConfigPanel({ node, onClose, onUpdate, onDelete, modelAPIs, mcpServers 
           <div className="space-y-2">
             <Label>Model</Label>
             <Input
-              value={api.spec.serverConfig?.model || ''}
+              value={api.spec.hostedConfig?.model || ''}
               onChange={(e) => {
                 const updatedResource = {
                   ...api,
                   spec: {
                     ...api.spec,
-                    serverConfig: {
-                      ...api.spec.serverConfig,
+                    hostedConfig: {
+                      ...api.spec.hostedConfig,
                       model: e.target.value,
                     },
                   },
@@ -293,15 +295,18 @@ function ConfigPanel({ node, onClose, onUpdate, onDelete, modelAPIs, mcpServers 
           </Select>
         </div>
         <div className="space-y-2">
-          <Label>MCP Package</Label>
+          <Label>Tools Package</Label>
           <Input
-            value={server.spec.config?.mcp || ''}
+            value={server.spec.config?.tools?.fromPackage || ''}
             onChange={(e) => {
               const updatedResource = {
                 ...server,
                 spec: {
                   ...server.spec,
-                  config: { ...server.spec.config, mcp: e.target.value },
+                  config: { 
+                    ...server.spec.config, 
+                    tools: { ...server.spec.config?.tools, fromPackage: e.target.value } 
+                  },
                 },
               };
               onUpdate(node.id, { resource: updatedResource });
@@ -703,7 +708,7 @@ export function VisualCanvas() {
     switch (type) {
       case 'ModelAPI':
         return {
-          apiVersion: 'ethical.institute/v1alpha1',
+          apiVersion: 'kaos.tools/v1alpha1',
           kind: 'ModelAPI',
           metadata: baseMeta,
           spec: { mode: 'Proxy', proxyConfig: { env: [] } },
@@ -711,15 +716,15 @@ export function VisualCanvas() {
         };
       case 'MCPServer':
         return {
-          apiVersion: 'ethical.institute/v1alpha1',
+          apiVersion: 'kaos.tools/v1alpha1',
           kind: 'MCPServer',
           metadata: baseMeta,
-          spec: { type: 'python-runtime' as const, config: { mcp: 'mcp-server-calculator', env: [] } },
+          spec: { type: 'python-runtime' as const, config: { tools: { fromPackage: 'mcp-server-calculator' } } },
           status: { phase: 'Pending' },
         };
       default:
         return {
-          apiVersion: 'ethical.institute/v1alpha1',
+          apiVersion: 'kaos.tools/v1alpha1',
           kind: 'Agent',
           metadata: baseMeta,
           spec: {

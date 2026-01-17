@@ -81,7 +81,7 @@ export function CRUDTestPanel() {
     // Create
     const createPassed = await runTest(suiteName, 'Create ModelAPI', async () => {
       const newModelAPI: Omit<ModelAPI, 'status'> = {
-        apiVersion: 'ethical.institute/v1alpha1',
+        apiVersion: 'kaos.tools/v1alpha1',
         kind: 'ModelAPI',
         metadata: {
           name: testName,
@@ -168,7 +168,7 @@ export function CRUDTestPanel() {
     // Create
     const createPassed = await runTest(suiteName, 'Create MCPServer', async () => {
       const newMCPServer: Omit<MCPServer, 'status'> = {
-        apiVersion: 'ethical.institute/v1alpha1',
+        apiVersion: 'kaos.tools/v1alpha1',
         kind: 'MCPServer',
         metadata: {
           name: testName,
@@ -177,8 +177,9 @@ export function CRUDTestPanel() {
         spec: {
           type: 'python-runtime',
           config: {
-            mcp: 'test-mcp-server',
-            env: [{ name: 'TEST_VAR', value: 'original' }]
+            tools: {
+              fromPackage: 'test-mcp-server'
+            }
           }
         }
       };
@@ -210,13 +211,15 @@ export function CRUDTestPanel() {
         spec: {
           ...latestResource.spec,
           config: {
-            mcp: 'updated-mcp-server',
-            env: [{ name: 'TEST_VAR', value: 'updated' }]
+            ...latestResource.spec.config,
+            tools: {
+              fromPackage: 'updated-mcp-server'
+            }
           }
         }
       };
       const result = await k8sClient.updateMCPServer(updated);
-      if (result.spec.config?.mcp !== 'updated-mcp-server') {
+      if (result.spec.config?.tools?.fromPackage !== 'updated-mcp-server') {
         throw new Error('Update did not apply');
       }
     });
@@ -249,7 +252,7 @@ export function CRUDTestPanel() {
     // Create
     const createPassed = await runTest(suiteName, 'Create Agent', async () => {
       const newAgent: Omit<Agent, 'status'> = {
-        apiVersion: 'ethical.institute/v1alpha1',
+        apiVersion: 'kaos.tools/v1alpha1',
         kind: 'Agent',
         metadata: {
           name: testName,
