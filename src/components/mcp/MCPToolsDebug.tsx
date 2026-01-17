@@ -91,14 +91,20 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
     fetchTools();
   }, [fetchTools]);
 
+  // Helper to get tool schema (inputSchema for FastMCP, parameters for legacy)
+  const getToolSchema = (tool: MCPTool) => {
+    return tool.inputSchema || tool.parameters;
+  };
+
   // Handle tool selection
   const handleSelectTool = (tool: MCPTool) => {
     setSelectedTool(tool);
     // Initialize args with empty values
     const initialArgs: Record<string, string> = {};
-    if (tool.parameters?.properties) {
-      Object.keys(tool.parameters.properties).forEach(key => {
-        const prop = tool.parameters.properties[key];
+    const schema = getToolSchema(tool);
+    if (schema?.properties) {
+      Object.keys(schema.properties).forEach(key => {
+        const prop = schema.properties[key];
         initialArgs[key] = prop.default !== undefined ? String(prop.default) : '';
       });
     }
@@ -114,9 +120,10 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
 
     // Parse arguments based on parameter types
     const parsedArgs: Record<string, unknown> = {};
-    if (selectedTool.parameters?.properties) {
+    const schema = getToolSchema(selectedTool);
+    if (schema?.properties) {
       Object.entries(toolArgs).forEach(([key, value]) => {
-        const paramDef = selectedTool.parameters.properties[key];
+        const paramDef = schema.properties[key];
         if (!paramDef) {
           parsedArgs[key] = value;
           return;
@@ -304,25 +311,28 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
                         <div className="px-2 pb-2 pt-0">
                           <Separator className="mb-2" />
                           <div className="space-y-2">
-                            {tool.parameters?.properties && Object.entries(tool.parameters.properties).length > 0 ? (
-                              Object.entries(tool.parameters.properties).map(([name, param]) => (
-                                <div key={name} className="flex items-start gap-2 text-xs">
-                                  <code className="bg-muted px-1 py-0.5 rounded font-mono">
-                                    {name}
-                                  </code>
-                                  <Badge variant={getTypeBadgeVariant(param.type)} className="text-[10px]">
-                                    {param.type}
-                                  </Badge>
-                                  {tool.parameters.required?.includes(name) && (
-                                    <Badge variant="destructive" className="text-[10px]">
-                                      required
+                            {(() => {
+                              const schema = getToolSchema(tool);
+                              return schema?.properties && Object.entries(schema.properties).length > 0 ? (
+                                Object.entries(schema.properties).map(([name, param]) => (
+                                  <div key={name} className="flex items-start gap-2 text-xs">
+                                    <code className="bg-muted px-1 py-0.5 rounded font-mono">
+                                      {name}
+                                    </code>
+                                    <Badge variant={getTypeBadgeVariant(param.type)} className="text-[10px]">
+                                      {param.type}
                                     </Badge>
-                                  )}
-                                </div>
-                              ))
-                            ) : (
-                              <p className="text-xs text-muted-foreground">No parameters</p>
-                            )}
+                                    {schema.required?.includes(name) && (
+                                      <Badge variant="destructive" className="text-[10px]">
+                                        required
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (
+                                <p className="text-xs text-muted-foreground">No parameters</p>
+                              );
+                            })()}
                           </div>
                           <Button
                             size="sm"
@@ -365,47 +375,50 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
                 <div className="space-y-4">
                   <div>
                     <h4 className="text-sm font-medium mb-3">Parameters</h4>
-                    {selectedTool.parameters?.properties && Object.entries(selectedTool.parameters.properties).length > 0 ? (
-                      <div className="space-y-3">
-                        {Object.entries(selectedTool.parameters.properties).map(([name, param]) => (
-                          <div key={name}>
-                            <Label htmlFor={name} className="text-sm flex items-center gap-2 mb-1.5">
-                              <code className="font-mono">{name}</code>
-                              <Badge variant={getTypeBadgeVariant(param.type)} className="text-[10px]">
-                                {param.type}
-                              </Badge>
-                              {selectedTool.parameters.required?.includes(name) && (
-                                <span className="text-destructive text-xs">*</span>
+                    {(() => {
+                      const schema = getToolSchema(selectedTool);
+                      return schema?.properties && Object.entries(schema.properties).length > 0 ? (
+                        <div className="space-y-3">
+                          {Object.entries(schema.properties).map(([name, param]) => (
+                            <div key={name}>
+                              <Label htmlFor={name} className="text-sm flex items-center gap-2 mb-1.5">
+                                <code className="font-mono">{name}</code>
+                                <Badge variant={getTypeBadgeVariant(param.type)} className="text-[10px]">
+                                  {param.type}
+                                </Badge>
+                                {schema.required?.includes(name) && (
+                                  <span className="text-destructive text-xs">*</span>
+                                )}
+                              </Label>
+                              {param.description && (
+                                <p className="text-xs text-muted-foreground mb-1.5">{param.description}</p>
                               )}
-                            </Label>
-                            {param.description && (
-                              <p className="text-xs text-muted-foreground mb-1.5">{param.description}</p>
-                            )}
-                            {param.type === 'object' || param.type === 'array' ? (
-                              <Textarea
-                                id={name}
-                                value={toolArgs[name] || ''}
-                                onChange={(e) => setToolArgs(prev => ({ ...prev, [name]: e.target.value }))}
-                                placeholder={`Enter ${param.type} as JSON...`}
-                                className="font-mono text-sm"
-                                rows={3}
-                              />
-                            ) : (
-                              <Input
-                                id={name}
-                                type={param.type === 'integer' || param.type === 'number' ? 'number' : 'text'}
-                                value={toolArgs[name] || ''}
-                                onChange={(e) => setToolArgs(prev => ({ ...prev, [name]: e.target.value }))}
-                                placeholder={param.default !== undefined ? String(param.default) : `Enter ${name}...`}
-                                className="font-mono"
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">This tool has no parameters</p>
-                    )}
+                              {param.type === 'object' || param.type === 'array' ? (
+                                <Textarea
+                                  id={name}
+                                  value={toolArgs[name] || ''}
+                                  onChange={(e) => setToolArgs(prev => ({ ...prev, [name]: e.target.value }))}
+                                  placeholder={`Enter ${param.type} as JSON...`}
+                                  className="font-mono text-sm"
+                                  rows={3}
+                                />
+                              ) : (
+                                <Input
+                                  id={name}
+                                  type={param.type === 'integer' || param.type === 'number' ? 'number' : 'text'}
+                                  value={toolArgs[name] || ''}
+                                  onChange={(e) => setToolArgs(prev => ({ ...prev, [name]: e.target.value }))}
+                                  placeholder={param.default !== undefined ? String(param.default) : `Enter ${name}...`}
+                                  className="font-mono"
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">This tool has no parameters</p>
+                      );
+                    })()}
                   </div>
 
                   <Button

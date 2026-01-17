@@ -515,17 +515,32 @@ class KubernetesClient {
   
   /**
    * List available tools from an MCP server via K8s service proxy
-   * Uses GET /mcp/tools endpoint
+   * Uses JSON-RPC protocol: POST /mcp with { "jsonrpc": "2.0", "method": "tools/list", "id": 1, "params": {} }
    */
   async listMCPTools(
     serviceName: string,
     namespace?: string,
     port: number = 8000
   ): Promise<{ tools: MCPTool[] }> {
+    // Generate unique request ID
+    const requestId = Date.now();
+    
+    const jsonRpcRequest = {
+      jsonrpc: '2.0',
+      id: requestId,
+      method: 'tools/list',
+      params: {},
+    };
+    
+    console.log(`[k8sClient] Sending JSON-RPC tools/list to ${serviceName}:`, jsonRpcRequest);
+    
     const response = await this.proxyServiceRequest(
       serviceName,
-      '/mcp/tools',
-      { method: 'GET' },
+      '/mcp',
+      {
+        method: 'POST',
+        body: JSON.stringify(jsonRpcRequest),
+      },
       namespace,
       port
     );
@@ -535,12 +550,22 @@ class KubernetesClient {
       throw new Error(`MCP tools list error ${response.status}: ${errorText}`);
     }
     
-    return response.json();
+    const jsonRpcResponse = await response.json();
+    console.log(`[k8sClient] JSON-RPC tools/list response:`, jsonRpcResponse);
+    
+    // Handle JSON-RPC response format
+    if (jsonRpcResponse.error) {
+      throw new Error(`MCP JSON-RPC error: ${jsonRpcResponse.error.message || JSON.stringify(jsonRpcResponse.error)}`);
+    }
+    
+    // The result contains the tools list - format: { tools: [...] }
+    const result = jsonRpcResponse.result || jsonRpcResponse;
+    return { tools: result.tools || [] };
   }
 
   /**
    * Call a tool on an MCP server via K8s service proxy
-   * Uses POST /mcp/tools endpoint with { name, args }
+   * Uses JSON-RPC protocol: POST /mcp with { "jsonrpc": "2.0", "method": "tools/call", "id": 1, "params": { "name": "...", "arguments": {...} } }
    */
   async callMCPTool(
     serviceName: string,
@@ -549,12 +574,27 @@ class KubernetesClient {
     namespace?: string,
     port: number = 8000
   ): Promise<MCPToolCallResult> {
+    // Generate unique request ID
+    const requestId = Date.now();
+    
+    const jsonRpcRequest = {
+      jsonrpc: '2.0',
+      id: requestId,
+      method: 'tools/call',
+      params: {
+        name: toolName,
+        arguments: args,
+      },
+    };
+    
+    console.log(`[k8sClient] Sending JSON-RPC tools/call to ${serviceName}:`, jsonRpcRequest);
+    
     const response = await this.proxyServiceRequest(
       serviceName,
-      '/mcp/tools',
+      '/mcp',
       {
         method: 'POST',
-        body: JSON.stringify({ name: toolName, args }),
+        body: JSON.stringify(jsonRpcRequest),
       },
       namespace,
       port
@@ -565,7 +605,16 @@ class KubernetesClient {
       throw new Error(`MCP tool call error ${response.status}: ${errorText}`);
     }
     
-    return response.json();
+    const jsonRpcResponse = await response.json();
+    console.log(`[k8sClient] JSON-RPC tools/call response:`, jsonRpcResponse);
+    
+    // Handle JSON-RPC response format
+    if (jsonRpcResponse.error) {
+      throw new Error(`MCP JSON-RPC error: ${jsonRpcResponse.error.message || JSON.stringify(jsonRpcResponse.error)}`);
+    }
+    
+    // Return the result from the JSON-RPC response
+    return jsonRpcResponse.result || jsonRpcResponse;
   }
 
   /**

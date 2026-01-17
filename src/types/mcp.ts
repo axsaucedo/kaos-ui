@@ -1,6 +1,7 @@
 /**
  * MCP Tools Types
- * Types for interacting with MCP server tools API
+ * Types for interacting with MCP server using JSON-RPC protocol
+ * Endpoint: POST /mcp with JSON-RPC body
  */
 
 // Tool parameter schema (JSON Schema format)
@@ -14,18 +15,25 @@ export interface MCPToolParameter {
   required?: string[];
 }
 
-// Tool definition returned from GET /mcp/tools
+// Tool definition returned from tools/list JSON-RPC method
 export interface MCPTool {
   name: string;
   description: string;
-  parameters: {
+  // FastMCP uses inputSchema for the parameters
+  inputSchema?: {
+    type: 'object';
+    properties: Record<string, MCPToolParameter>;
+    required?: string[];
+  };
+  // Also support parameters for backwards compatibility
+  parameters?: {
     type: 'object';
     properties: Record<string, MCPToolParameter>;
     required?: string[];
   };
 }
 
-// Result from POST /mcp/tools
+// Result from tools/call JSON-RPC method
 export interface MCPToolCallResult {
   result?: unknown;
   error?: string;
@@ -33,10 +41,31 @@ export interface MCPToolCallResult {
     type: string;
     text?: string;
   }>;
+  isError?: boolean;
 }
 
-// Tool call request
+// JSON-RPC request format
+export interface MCPJsonRpcRequest {
+  jsonrpc: '2.0';
+  id: number | string;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+// JSON-RPC response format
+export interface MCPJsonRpcResponse {
+  jsonrpc: '2.0';
+  id: number | string;
+  result?: unknown;
+  error?: {
+    code: number;
+    message: string;
+    data?: unknown;
+  };
+}
+
+// Tool call request params
 export interface MCPToolCallRequest {
   name: string;
-  args: Record<string, unknown>;
+  arguments: Record<string, unknown>;
 }

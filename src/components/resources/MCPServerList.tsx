@@ -38,7 +38,7 @@ export function MCPServerList() {
       ),
     },
     {
-      key: 'tools',
+      key: 'toolsSource',
       header: 'Tools Source',
       render: (item: MCPServer) => (
         <span className="text-sm text-muted-foreground font-mono">
@@ -47,7 +47,7 @@ export function MCPServerList() {
       ),
     },
     {
-      key: 'tools',
+      key: 'availableTools',
       header: 'Tools',
       render: (item: MCPServer) => (
         <div className="flex flex-wrap gap-1">
