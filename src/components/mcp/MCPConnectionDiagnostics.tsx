@@ -642,8 +642,14 @@ export function MCPConnectionDiagnostics({ mcpServer, onSuccess }: MCPConnection
                         <div className={`mt-1 px-2 py-1 rounded text-xs font-mono ${
                           result.sessionId ? 'bg-green-500/10 text-green-600' : 'bg-yellow-500/10 text-yellow-600'
                         }`}>
-                          {result.sessionId || '(none - stateless mode)'}
+                          {result.sessionId || '(none - check CORS headers if server requires sessions)'}
                         </div>
+                        {!result.sessionId && result.status === 'success' && (
+                          <p className="mt-1 text-[10px] text-yellow-600">
+                            ⚠️ Server returned 200 OK but no Mcp-Session-Id header visible. 
+                            This is likely a CORS issue - the header may be sent but not exposed to JavaScript.
+                          </p>
+                        )}
                       </div>
                     )}
 
@@ -735,7 +741,32 @@ export function MCPConnectionDiagnostics({ mcpServer, onSuccess }: MCPConnection
         <div className="px-4 py-3 border-t border-border bg-muted/20">
           <h4 className="text-xs font-medium text-muted-foreground mb-2">Recommendations:</h4>
           <ul className="text-xs space-y-1 text-muted-foreground">
-            {results.find(r => r.name === 'initialize' && r.sessionId === null) && (
+            {/* CORS Header Issue - Initialize succeeds but no session ID */}
+            {results.find(r => r.name === 'initialize' && r.status === 'success' && r.sessionId === null) && 
+             results.find(r => r.name === 'tools_list' && r.status === 'error') && (
+              <li className="flex items-start gap-2">
+                <span className="text-destructive">•</span>
+                <div>
+                  <strong className="text-destructive">CORS Header Issue Detected!</strong>
+                  <p className="mt-1">
+                    The initialize request succeeded, but the browser cannot read the <code className="bg-muted px-1 rounded">Mcp-Session-Id</code> response header 
+                    due to missing CORS configuration. The server needs to include:
+                  </p>
+                  <pre className="mt-1 p-2 rounded bg-muted font-mono text-[10px] overflow-auto">
+Access-Control-Expose-Headers: Mcp-Session-Id, mcp-session-id</pre>
+                  <p className="mt-1">
+                    <strong>Fix options:</strong>
+                  </p>
+                  <ul className="mt-1 space-y-0.5 list-disc list-inside">
+                    <li>Configure your K8s Ingress/proxy to add the CORS header</li>
+                    <li>Configure the MCP server to expose the session header</li>
+                    <li>Use an Nginx or similar reverse proxy with CORS headers</li>
+                  </ul>
+                </div>
+              </li>
+            )}
+            {results.find(r => r.name === 'initialize' && r.sessionId === null) && 
+             !results.find(r => r.name === 'initialize' && r.status === 'success' && r.sessionId === null) && (
               <li className="flex items-start gap-2">
                 <span className="text-yellow-500">•</span>
                 Server is running in <strong>stateless mode</strong> (no session ID). 
@@ -749,7 +780,8 @@ export function MCPConnectionDiagnostics({ mcpServer, onSuccess }: MCPConnection
               </li>
             )}
             {results.find(r => r.name === 'direct_tools_list' && r.status === 'error') && 
-             results.find(r => r.name === 'tools_list' && r.status === 'error') && (
+             results.find(r => r.name === 'tools_list' && r.status === 'error') && 
+             !results.find(r => r.name === 'initialize' && r.status === 'success' && r.sessionId === null) && (
               <li className="flex items-start gap-2">
                 <span className="text-destructive">•</span>
                 Both session and stateless modes failed. Check server logs for details.
