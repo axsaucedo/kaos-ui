@@ -74,15 +74,16 @@ export class MCPClient {
   private buildHeaders(includeSessionId: boolean = false): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      // CRITICAL: Both Accept types are required!
+      // CRITICAL: Both Accept types are required for MCP Streamable HTTP!
       'Accept': 'application/json, text/event-stream',
       'X-Requested-With': 'XMLHttpRequest',
       'bypass-tunnel-reminder': '1',
     };
 
     // Include session ID if we have one (required after initialize)
+    // Note: Header name is case-insensitive in HTTP, but we use the exact case from server
     if (includeSessionId && this.session?.sessionId) {
-      headers['mcp-session-id'] = this.session.sessionId;
+      headers['Mcp-Session-Id'] = this.session.sessionId;
     }
 
     return headers;

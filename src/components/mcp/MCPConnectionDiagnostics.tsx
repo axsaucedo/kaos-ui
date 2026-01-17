@@ -181,10 +181,10 @@ export function MCPConnectionDiagnostics({ mcpServer, onSuccess }: MCPConnection
       const url = `${proxyBaseUrl}/mcp`;
       const requestBody = {
         jsonrpc: '2.0',
-        id: Date.now(),
+        id: 1,
         method: 'initialize',
         params: {
-          protocolVersion: '2025-03-26',
+          protocolVersion: '2024-11-05',
           clientInfo: { name: 'kaos-ui-diagnostics', version: '1.0.0' },
           capabilities: {},
         },
@@ -297,7 +297,7 @@ export function MCPConnectionDiagnostics({ mcpServer, onSuccess }: MCPConnection
       const url = `${proxyBaseUrl}/mcp`;
       const requestBody = {
         jsonrpc: '2.0',
-        id: Date.now(),
+        id: 2,
         method: 'tools/list',
         params: {},
       };
@@ -373,7 +373,7 @@ export function MCPConnectionDiagnostics({ mcpServer, onSuccess }: MCPConnection
       const url = `${proxyBaseUrl}/mcp`;
       const requestBody = {
         jsonrpc: '2.0',
-        id: Date.now(),
+        id: 3,
         method: 'tools/list',
         params: {},
       };
