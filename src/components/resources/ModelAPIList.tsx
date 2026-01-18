@@ -40,15 +40,6 @@ export function ModelAPIList() {
       ),
     },
     {
-      key: 'endpoint',
-      header: 'Endpoint',
-      render: (item: ModelAPI) => (
-        <span className="text-sm text-muted-foreground font-mono">
-          {item.status?.endpoint || '-'}
-        </span>
-      ),
-    },
-    {
       key: 'created',
       header: 'Created',
       render: (item: ModelAPI) => (

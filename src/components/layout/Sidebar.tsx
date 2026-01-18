@@ -42,7 +42,6 @@ const navItems: NavItem[] = [
 const k8sItems: NavItem[] = [
   { id: 'pods', label: 'Pods', icon: Boxes },
   { id: 'secrets', label: 'Secrets', icon: KeyRound },
-  { id: 'volumes', label: 'Volumes', icon: FileText },
 ];
 
 const toolItems: NavItem[] = [

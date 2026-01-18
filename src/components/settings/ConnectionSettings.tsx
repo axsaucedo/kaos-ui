@@ -195,8 +195,8 @@ export function ConnectionSettings() {
               disabled={connectionStatus === 'connected'}
             />
             <p className="text-xs text-muted-foreground">
-              Run <code className="bg-muted px-1 py-0.5 rounded">kaos proxy --port=8010</code> or{' '}
-              <code className="bg-muted px-1 py-0.5 rounded">kubectl proxy --port=8010</code>
+              Run <code className="bg-muted px-1 py-0.5 rounded">kaos ui</code> or{' '}
+              <code className="bg-muted px-1 py-0.5 rounded">kaos ui --port=8010</code>
             </p>
           </div>
 
@@ -271,18 +271,18 @@ export function ConnectionSettings() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <h4 className="font-medium">1. Start the proxy</h4>
+            <h4 className="font-medium">1. Start the UI with proxy</h4>
             <pre className="bg-muted p-3 rounded-md text-sm overflow-x-auto">
-              kaos proxy --port=8010
+              kaos ui
             </pre>
             <p className="text-xs text-muted-foreground">
-              Or use kubectl directly: <code className="bg-muted px-1 py-0.5 rounded">kubectl proxy --port=8010</code>
+              Or specify a custom port: <code className="bg-muted px-1 py-0.5 rounded">kaos ui --port=8010</code>
             </p>
           </div>
           <div className="space-y-2">
             <h4 className="font-medium">2. Connect</h4>
             <p className="text-sm text-muted-foreground">
-              Enter the proxy URL above (default: <code className="bg-muted px-1 py-0.5 rounded">http://localhost:8010</code>) 
+              Enter the Kubernetes proxy URL above (default: <code className="bg-muted px-1 py-0.5 rounded">http://localhost:8010</code>) 
               and click Connect.
             </p>
           </div>
@@ -290,7 +290,7 @@ export function ConnectionSettings() {
             <h4 className="font-medium text-amber-600 mb-2">⚠️ CORS Limitation</h4>
             <p className="text-sm text-muted-foreground">
               <code>kubectl proxy</code> doesn't handle CORS preflight requests, so direct browser 
-              connections may fail. Use the kaos CLI proxy which includes CORS support.
+              connections may fail. Use the <code className="bg-muted px-1 py-0.5 rounded">kaos ui</code> CLI which includes CORS support.
             </p>
           </div>
         </CardContent>

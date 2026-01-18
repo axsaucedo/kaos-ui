@@ -62,6 +62,14 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
                 </Badge>
               </p>
             </div>
+            <div className="col-span-2">
+              <span className="text-muted-foreground">Model</span>
+              <p className="font-mono font-medium">
+                {modelAPI.spec.mode === 'Proxy' 
+                  ? modelAPI.spec.proxyConfig?.model || 'Not specified'
+                  : modelAPI.spec.hostedConfig?.model || 'Not specified'}
+              </p>
+            </div>
           </div>
           
           {modelAPI.metadata.creationTimestamp && (

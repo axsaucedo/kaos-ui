@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Copy, Check, FileCode } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,66 +10,154 @@ interface YamlViewerProps {
   maxHeight?: string;
 }
 
-export function YamlViewer({ resource, title = 'YAML', maxHeight = '400px' }: YamlViewerProps) {
+// Fields to exclude from YAML output (internal K8s managed fields)
+const EXCLUDED_FIELDS = ['managedFields', 'selfLink', 'generation'];
+
+// Clean the resource by removing excluded fields
+function cleanResource(obj: unknown): unknown {
+  if (obj === null || obj === undefined) {
+    return obj;
+  }
+  
+  if (Array.isArray(obj)) {
+    return obj.map(cleanResource);
+  }
+  
+  if (typeof obj === 'object') {
+    const cleaned: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      if (!EXCLUDED_FIELDS.includes(key)) {
+        cleaned[key] = cleanResource(value);
+      }
+    }
+    return cleaned;
+  }
+  
+  return obj;
+}
+
+// Convert resource to YAML-like format
+function toYaml(obj: unknown, indent = 0): string {
+  const spaces = '  '.repeat(indent);
+  
+  if (obj === null || obj === undefined) {
+    return 'null';
+  }
+  
+  if (typeof obj === 'string') {
+    // Multi-line strings
+    if (obj.includes('\n')) {
+      return `|\n${obj.split('\n').map(line => spaces + '  ' + line).join('\n')}`;
+    }
+    // Strings that need quoting
+    if (obj.includes(':') || obj.includes('#') || obj.startsWith(' ') || obj.endsWith(' ') || obj === '') {
+      return `"${obj.replace(/"/g, '\\"')}"`;
+    }
+    return obj;
+  }
+  
+  if (typeof obj === 'number' || typeof obj === 'boolean') {
+    return String(obj);
+  }
+  
+  if (Array.isArray(obj)) {
+    if (obj.length === 0) return '[]';
+    return obj.map(item => {
+      if (typeof item === 'object' && item !== null) {
+        const inner = toYaml(item, indent + 1);
+        const lines = inner.split('\n');
+        return `\n${spaces}- ${lines[0]}${lines.slice(1).map(l => '\n' + spaces + '  ' + l.trim()).join('')}`;
+      }
+      return `\n${spaces}- ${toYaml(item, indent + 1)}`;
+    }).join('');
+  }
+  
+  if (typeof obj === 'object') {
+    const entries = Object.entries(obj as Record<string, unknown>).filter(
+      ([, v]) => v !== undefined
+    );
+    if (entries.length === 0) return '{}';
+    
+    return entries.map(([key, value]) => {
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        return `${spaces}${key}:\n${toYaml(value, indent + 1)}`;
+      }
+      if (Array.isArray(value)) {
+        return `${spaces}${key}:${toYaml(value, indent + 1)}`;
+      }
+      return `${spaces}${key}: ${toYaml(value, indent)}`;
+    }).join('\n');
+  }
+  
+  return String(obj);
+}
+
+// Syntax highlighting for YAML
+function highlightYaml(yaml: string): React.ReactNode[] {
+  const lines = yaml.split('\n');
+  
+  return lines.map((line, index) => {
+    // Match key: value patterns
+    const keyValueMatch = line.match(/^(\s*)([a-zA-Z0-9_-]+)(:)(.*)$/);
+    if (keyValueMatch) {
+      const [, indent, key, colon, value] = keyValueMatch;
+      const trimmedValue = value.trim();
+      
+      // Determine value color
+      let valueElement: React.ReactNode = value;
+      if (trimmedValue.startsWith('"') || trimmedValue.startsWith("'") || trimmedValue === '|') {
+        valueElement = <span className="text-green-500 dark:text-green-400">{value}</span>;
+      } else if (trimmedValue === 'true' || trimmedValue === 'false' || trimmedValue === 'null') {
+        valueElement = <span className="text-orange-500 dark:text-orange-400">{value}</span>;
+      } else if (/^\s*-?\d+(\.\d+)?$/.test(trimmedValue)) {
+        valueElement = <span className="text-blue-500 dark:text-blue-400">{value}</span>;
+      } else if (value) {
+        valueElement = <span className="text-foreground">{value}</span>;
+      }
+      
+      return (
+        <div key={index}>
+          {indent}
+          <span className="text-purple-500 dark:text-purple-400">{key}</span>
+          <span className="text-muted-foreground">{colon}</span>
+          {valueElement}
+        </div>
+      );
+    }
+    
+    // Match list items
+    const listMatch = line.match(/^(\s*)(-)(.*)$/);
+    if (listMatch) {
+      const [, indent, dash, rest] = listMatch;
+      return (
+        <div key={index}>
+          {indent}
+          <span className="text-muted-foreground">{dash}</span>
+          <span className="text-foreground">{rest}</span>
+        </div>
+      );
+    }
+    
+    // Multi-line string content (indented text after |)
+    if (line.match(/^\s+\S/)) {
+      return <div key={index} className="text-green-500 dark:text-green-400">{line}</div>;
+    }
+    
+    return <div key={index}>{line}</div>;
+  });
+}
+
+export function YamlViewer({ resource, title = 'YAML', maxHeight = '500px' }: YamlViewerProps) {
   const [copied, setCopied] = useState(false);
 
-  // Convert resource to YAML-like format
-  const toYaml = (obj: unknown, indent = 0): string => {
-    const spaces = '  '.repeat(indent);
-    
-    if (obj === null || obj === undefined) {
-      return 'null';
-    }
-    
-    if (typeof obj === 'string') {
-      // Multi-line strings
-      if (obj.includes('\n')) {
-        return `|\n${obj.split('\n').map(line => spaces + '  ' + line).join('\n')}`;
-      }
-      // Strings that need quoting
-      if (obj.includes(':') || obj.includes('#') || obj.startsWith(' ') || obj.endsWith(' ')) {
-        return `"${obj.replace(/"/g, '\\"')}"`;
-      }
-      return obj;
-    }
-    
-    if (typeof obj === 'number' || typeof obj === 'boolean') {
-      return String(obj);
-    }
-    
-    if (Array.isArray(obj)) {
-      if (obj.length === 0) return '[]';
-      return obj.map(item => {
-        if (typeof item === 'object' && item !== null) {
-          const inner = toYaml(item, indent + 1);
-          const lines = inner.split('\n');
-          return `\n${spaces}- ${lines[0]}${lines.slice(1).map(l => '\n' + spaces + '  ' + l.trim()).join('')}`;
-        }
-        return `\n${spaces}- ${toYaml(item, indent + 1)}`;
-      }).join('');
-    }
-    
-    if (typeof obj === 'object') {
-      const entries = Object.entries(obj as Record<string, unknown>).filter(
-        ([, v]) => v !== undefined
-      );
-      if (entries.length === 0) return '{}';
-      
-      return entries.map(([key, value]) => {
-        if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-          return `${spaces}${key}:\n${toYaml(value, indent + 1)}`;
-        }
-        if (Array.isArray(value)) {
-          return `${spaces}${key}:${toYaml(value, indent + 1)}`;
-        }
-        return `${spaces}${key}: ${toYaml(value, indent)}`;
-      }).join('\n');
-    }
-    
-    return String(obj);
-  };
-
-  const yaml = toYaml(resource);
+  const { yaml, highlightedYaml } = useMemo(() => {
+    const cleanedResource = cleanResource(resource);
+    const yamlString = toYaml(cleanedResource);
+    return {
+      yaml: yamlString,
+      highlightedYaml: highlightYaml(yamlString),
+    };
+  }, [resource]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(yaml);
@@ -103,7 +191,7 @@ export function YamlViewer({ resource, title = 'YAML', maxHeight = '400px' }: Ya
       <CardContent>
         <ScrollArea className="rounded-lg border bg-muted/30" style={{ maxHeight }}>
           <pre className="p-4 text-xs font-mono whitespace-pre overflow-x-auto">
-            {yaml}
+            {highlightedYaml}
           </pre>
         </ScrollArea>
       </CardContent>

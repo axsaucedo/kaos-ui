@@ -14,7 +14,7 @@ interface TestResult {
 }
 
 export function ConnectionDiagnostics() {
-  const [ngrokUrl, setNgrokUrl] = useState('');
+  const [proxyUrl, setProxyUrl] = useState('');
   const [isRunning, setIsRunning] = useState(false);
   const [results, setResults] = useState<TestResult[]>([]);
 
@@ -23,16 +23,15 @@ export function ConnectionDiagnostics() {
   };
 
   const runDiagnostics = async () => {
-    if (!ngrokUrl) return;
+    if (!proxyUrl) return;
 
-    const cleanUrl = ngrokUrl.replace(/\/$/, '');
+    const cleanUrl = proxyUrl.replace(/\/$/, '');
     setIsRunning(true);
 
     // Initialize all tests
     const initialResults: TestResult[] = [
       { name: 'URL Format', status: 'pending', message: 'Checking URL format...' },
-      { name: 'Simple GET (no headers)', status: 'pending', message: 'Testing simple GET without custom headers...' },
-      { name: 'GET with ngrok header', status: 'pending', message: 'Testing GET with ngrok-skip-browser-warning...' },
+      { name: 'Simple GET Request', status: 'pending', message: 'Testing connection to proxy...' },
       { name: 'CORS Headers Check', status: 'pending', message: 'Checking if CORS headers are present...' },
       { name: 'K8s API Response', status: 'pending', message: 'Validating Kubernetes API response...' },
     ];
@@ -58,47 +57,31 @@ export function ConnectionDiagnostics() {
       return;
     }
 
-    // Test 2: Simple GET without any custom headers (should NOT trigger preflight)
-    updateResult(1, { status: 'running', message: 'Testing simple GET...' });
+    // Test 2: Simple GET request
+    updateResult(1, { status: 'running', message: 'Testing connection...' });
     await new Promise(r => setTimeout(r, 200));
     
-    let simpleGetWorked = false;
-    let simpleGetData: any = null;
+    let getWorked = false;
+    let responseData: any = null;
     
     try {
-      // No custom headers = no CORS preflight needed
       const response = await fetch(`${cleanUrl}/version`);
       
       if (response.ok) {
-        simpleGetData = await response.json();
-        simpleGetWorked = true;
+        responseData = await response.json();
+        getWorked = true;
         updateResult(1, { 
           status: 'success', 
-          message: 'Simple GET works!', 
-          details: `K8s ${simpleGetData.gitVersion || 'responded'}` 
+          message: 'Connection successful!', 
+          details: `K8s ${responseData.gitVersion || 'responded'}` 
         });
       } else {
         const text = await response.text();
-        // Check if we got ngrok's warning page
-        if (text.includes('ngrok') && text.includes('ERR_NGROK')) {
-          updateResult(1, { 
-            status: 'warning', 
-            message: `Got ngrok error page`, 
-            details: 'ngrok may have rate-limited or the tunnel is down' 
-          });
-        } else if (text.includes('ngrok') && text.includes('Visit Site')) {
-          updateResult(1, { 
-            status: 'warning', 
-            message: 'Got ngrok warning page', 
-            details: 'Need ngrok-skip-browser-warning header, which triggers preflight' 
-          });
-        } else {
-          updateResult(1, { 
-            status: 'error', 
-            message: `HTTP ${response.status}`, 
-            details: text.slice(0, 200) 
-          });
-        }
+        updateResult(1, { 
+          status: 'error', 
+          message: `HTTP ${response.status}`, 
+          details: text.slice(0, 200) 
+        });
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Unknown';
@@ -109,54 +92,11 @@ export function ConnectionDiagnostics() {
       });
     }
 
-    // Test 3: GET with ngrok-skip-browser-warning header (triggers preflight)
-    updateResult(2, { status: 'running', message: 'Testing with ngrok header...' });
-    await new Promise(r => setTimeout(r, 200));
-    
-    let headerGetWorked = false;
-    
-    try {
-      const response = await fetch(`${cleanUrl}/version`, {
-        headers: {
-          'ngrok-skip-browser-warning': '1',
-        },
-      });
-      
-      if (response.ok) {
-        const data = await response.json();
-        headerGetWorked = true;
-        updateResult(2, { 
-          status: 'success', 
-          message: 'GET with header works!', 
-          details: `CORS preflight passed! K8s ${data.gitVersion}` 
-        });
-        simpleGetData = data;
-      } else {
-        updateResult(2, { 
-          status: 'error', 
-          message: `HTTP ${response.status}`, 
-          details: await response.text().then(t => t.slice(0, 200)).catch(() => 'No body') 
-        });
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown';
-      if (msg.includes('NetworkError') || msg.includes('CORS') || msg.includes('fetch')) {
-        updateResult(2, { 
-          status: 'error', 
-          message: 'CORS preflight failed', 
-          details: 'Browser blocked due to missing Access-Control-Allow-Headers for ngrok-skip-browser-warning' 
-        });
-      } else {
-        updateResult(2, { status: 'error', message: 'Request failed', details: msg });
-      }
-    }
-
-    // Test 4: Check CORS headers
-    updateResult(3, { status: 'running', message: 'Checking CORS configuration...' });
+    // Test 3: Check CORS headers
+    updateResult(2, { status: 'running', message: 'Checking CORS configuration...' });
     await new Promise(r => setTimeout(r, 200));
     
     try {
-      // Try OPTIONS request to see what headers the server returns
       const response = await fetch(`${cleanUrl}/version`, {
         method: 'OPTIONS',
       });
@@ -166,52 +106,52 @@ export function ConnectionDiagnostics() {
       const corsHeaders = response.headers.get('Access-Control-Allow-Headers');
       
       if (response.status === 405) {
-        updateResult(3, { 
+        updateResult(2, { 
           status: 'warning', 
           message: 'OPTIONS returns 405', 
-          details: `kubectl proxy doesn't handle OPTIONS. CORS Origin: ${corsOrigin || 'not set'}` 
+          details: `kubectl proxy doesn't handle OPTIONS. CORS Origin: ${corsOrigin || 'not set'}. Use kaos ui for CORS support.` 
         });
       } else if (corsOrigin) {
-        updateResult(3, { 
+        updateResult(2, { 
           status: 'success', 
           message: 'CORS headers present', 
           details: `Origin: ${corsOrigin}, Methods: ${corsMethods || 'not set'}, Headers: ${corsHeaders || 'not set'}` 
         });
       } else {
-        updateResult(3, { 
+        updateResult(2, { 
           status: 'warning', 
           message: 'No CORS headers in OPTIONS response', 
           details: `Status: ${response.status}` 
         });
       }
     } catch (e) {
-      updateResult(3, { 
+      updateResult(2, { 
         status: 'error', 
         message: 'OPTIONS request failed', 
         details: e instanceof Error ? e.message : 'Unknown' 
       });
     }
 
-    // Test 5: Validate K8s response
-    updateResult(4, { status: 'running', message: 'Validating response...' });
+    // Test 4: Validate K8s response
+    updateResult(3, { status: 'running', message: 'Validating response...' });
     await new Promise(r => setTimeout(r, 200));
     
-    if (simpleGetWorked || headerGetWorked) {
-      if (simpleGetData && simpleGetData.gitVersion) {
-        updateResult(4, { 
+    if (getWorked) {
+      if (responseData && responseData.gitVersion) {
+        updateResult(3, { 
           status: 'success', 
           message: 'Valid Kubernetes API', 
-          details: `Version: ${simpleGetData.gitVersion}, Platform: ${simpleGetData.platform || 'unknown'}` 
+          details: `Version: ${responseData.gitVersion}, Platform: ${responseData.platform || 'unknown'}` 
         });
       } else {
-        updateResult(4, { 
+        updateResult(3, { 
           status: 'warning', 
           message: 'Response received but format unexpected', 
-          details: JSON.stringify(simpleGetData).slice(0, 100) 
+          details: JSON.stringify(responseData).slice(0, 100) 
         });
       }
     } else {
-      updateResult(4, { 
+      updateResult(3, { 
         status: 'error', 
         message: 'Could not validate', 
         details: 'No successful response received' 
@@ -241,31 +181,28 @@ export function ConnectionDiagnostics() {
     }
   };
 
-  const anySuccess = results.some(r => r.status === 'success' && (r.name.includes('GET')));
-  const needsCorsHeaders = results.some(r => 
-    r.status === 'error' && r.name === 'GET with ngrok header'
-  );
+  const anySuccess = results.some(r => r.status === 'success' && r.name.includes('GET'));
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Connection Diagnostics</CardTitle>
         <CardDescription>
-          Test connectivity to your Kubernetes cluster via ngrok
+          Test connectivity to your Kubernetes cluster via proxy
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="test-url">ngrok URL</Label>
+          <Label htmlFor="test-url">Kubernetes Proxy URL</Label>
           <div className="flex gap-2">
             <Input
               id="test-url"
-              placeholder="https://xxxx.ngrok-free.app"
-              value={ngrokUrl}
-              onChange={(e) => setNgrokUrl(e.target.value)}
+              placeholder="http://localhost:8010 or https://your-tunnel.loca.lt"
+              value={proxyUrl}
+              onChange={(e) => setProxyUrl(e.target.value)}
               disabled={isRunning}
             />
-            <Button onClick={runDiagnostics} disabled={isRunning || !ngrokUrl}>
+            <Button onClick={runDiagnostics} disabled={isRunning || !proxyUrl}>
               {isRunning ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -309,41 +246,6 @@ export function ConnectionDiagnostics() {
             <p className="text-sm text-muted-foreground">
               Your Kubernetes cluster is accessible. You can now use the Connect button above.
             </p>
-          </div>
-        )}
-
-        {needsCorsHeaders && (
-          <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 space-y-3">
-            <h4 className="font-medium text-red-600 flex items-center gap-2">
-              <XCircle className="h-4 w-4" />
-              CORS Preflight Failure - Root Cause
-            </h4>
-            <p className="text-sm text-muted-foreground">
-              The browser sends an <code className="bg-muted px-1 rounded">OPTIONS</code> preflight request before the actual request.
-              <code className="bg-muted px-1 rounded">kubectl proxy</code> returns <strong>405 Method Not Allowed</strong> for OPTIONS.
-            </p>
-            <p className="text-sm text-muted-foreground">
-              ngrok's <code className="bg-muted px-1 rounded">--response-header-add</code> adds CORS headers to the 405 response, 
-              but the browser still rejects it because:
-            </p>
-            <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
-              <li>Preflight must return status 200 or 204, not 405</li>
-              <li>kubectl proxy doesn't handle OPTIONS requests</li>
-            </ul>
-            
-            <div className="border-t border-red-500/20 pt-3 mt-3">
-              <h5 className="font-medium text-foreground mb-2">Solutions:</h5>
-              <div className="space-y-2 text-sm text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <span className="bg-green-600 text-white px-2 py-0.5 rounded text-xs font-medium">Recommended</span>
-                  <span><strong>Edge Function Proxy</strong> - Enable Lovable Cloud to create a server-side proxy. No CORS issues since it's server-to-server.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="bg-muted px-2 py-0.5 rounded text-xs">Alternative</span>
-                  <span><strong>Local CORS Proxy</strong> - Run nginx or <code className="bg-muted px-1 rounded">npx local-cors-proxy</code> in front of kubectl proxy to handle OPTIONS.</span>
-                </div>
-              </div>
-            </div>
           </div>
         )}
       </CardContent>
