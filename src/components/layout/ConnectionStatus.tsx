@@ -117,7 +117,7 @@ export function ConnectionStatus() {
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
-      <DropdownMenuContent align="center" className="w-48 bg-popover border border-border">
+      <DropdownMenuContent align="center" className="w-48 bg-popover border border-border z-[100]">
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           Switch Namespace
         </DropdownMenuLabel>

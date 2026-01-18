@@ -45,7 +45,7 @@ export function NamespaceSelector() {
           <ChevronDown className="h-3 w-3 text-muted-foreground" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48 bg-popover border border-border">
+      <DropdownMenuContent align="end" className="w-48 bg-popover border border-border z-[100]">
         <DropdownMenuLabel className="text-xs text-muted-foreground">
           Switch Namespace
         </DropdownMenuLabel>

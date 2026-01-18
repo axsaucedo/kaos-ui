@@ -247,6 +247,8 @@ export interface Pod {
     containers: {
       name: string;
       image: string;
+      command?: string[];
+      args?: string[];
       ports?: { containerPort: number }[];
     }[];
     nodeName?: string;

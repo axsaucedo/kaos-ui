@@ -199,7 +199,7 @@ export function AgentMemory({ agent }: AgentMemoryProps) {
               ) : (
                 <ScrollArea className="h-[400px] pr-4">
                   <div className="space-y-3">
-                    {events.map((event, index) => (
+                    {[...events].reverse().map((event, index) => (
                       <div
                         key={event.id || index}
                         className="flex gap-3 p-3 rounded-lg bg-muted/30 border border-border/50"

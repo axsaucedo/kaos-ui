@@ -188,8 +188,8 @@ export function YamlViewer({ resource, title = 'YAML', maxHeight = '500px' }: Ya
           </Button>
         </div>
       </CardHeader>
-      <CardContent>
-        <ScrollArea className="rounded-lg border bg-muted/30" style={{ maxHeight }}>
+      <CardContent className="p-0">
+        <ScrollArea className="rounded-lg border bg-muted/30" style={{ height: maxHeight, maxHeight }}>
           <pre className="p-4 text-xs font-mono whitespace-pre overflow-x-auto">
             {highlightedYaml}
           </pre>

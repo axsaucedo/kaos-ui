@@ -123,6 +123,31 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       // Update namespaces
       const namespaceNames = namespacesList.map((ns: { metadata: { name: string } }) => ns.metadata.name);
 
+      // Check if current namespace still exists
+      const currentNamespace = k8sClient.getConfig().namespace;
+      const namespaceExists = namespaceNames.length === 0 || namespaceNames.includes(currentNamespace);
+      
+      if (!namespaceExists && namespaceNames.length > 0) {
+        // Current namespace was deleted - switch to default or first available
+        const fallbackNamespace = namespaceNames.includes('default') ? 'default' : namespaceNames[0];
+        console.log(`[KubernetesConnectionContext] Namespace "${currentNamespace}" no longer exists, switching to "${fallbackNamespace}"`);
+        
+        // Clear resources and switch namespace
+        store.clearAllResources();
+        k8sClient.setConfig({ baseUrl: state.baseUrl, namespace: fallbackNamespace });
+        
+        setState(s => ({
+          ...s,
+          namespace: fallbackNamespace,
+          namespaces: namespaceNames,
+          error: null,
+          lastRefresh: new Date(),
+        }));
+        
+        addLogEntry('warn', `Namespace "${currentNamespace}" was deleted, switched to "${fallbackNamespace}"`, 'connection');
+        return;
+      }
+
       setState(s => ({
         ...s,
         error: null,
@@ -135,6 +160,34 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch resources';
       console.error('[KubernetesConnectionContext] refreshAll error:', error);
+      
+      // Check if this is a namespace not found error
+      if (message.includes('404') || message.includes('not found') || message.includes('Namespace')) {
+        // Likely the namespace was deleted - try to recover
+        console.log('[KubernetesConnectionContext] Possible namespace deletion detected, refreshing namespace list');
+        try {
+          const nsList = await k8sClient.listNamespaces();
+          const namespaceNames = nsList.map(ns => ns.metadata.name);
+          if (namespaceNames.length > 0) {
+            const fallbackNamespace = namespaceNames.includes('default') ? 'default' : namespaceNames[0];
+            store.clearAllResources();
+            k8sClient.setConfig({ baseUrl: state.baseUrl, namespace: fallbackNamespace });
+            setState(s => ({
+              ...s,
+              namespace: fallbackNamespace,
+              namespaces: namespaceNames,
+              error: null,
+            }));
+            addLogEntry('warn', `Switched to namespace "${fallbackNamespace}" after error`, 'connection');
+            // Retry refresh with new namespace
+            setTimeout(() => refreshAll(), 500);
+            return;
+          }
+        } catch (nsError) {
+          console.error('[KubernetesConnectionContext] Failed to recover from namespace error:', nsError);
+        }
+      }
+      
       setState(s => ({ ...s, error: message }));
       addLogEntry('error', message, 'connection');
     } finally {
@@ -340,66 +393,78 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     return () => stopPolling();
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
 
-  // CRUD operations
+  // CRUD operations - all trigger refreshAll after completion
   const createModelAPI = useCallback(async (api: ModelAPI): Promise<ModelAPI> => {
     const created = await k8sClient.createModelAPI(api);
     store.addModelAPI(created);
     addLogEntry('info', `Created ModelAPI ${created.metadata.name}`, 'api', created.metadata.name, 'ModelAPI');
+    // Trigger refresh to sync all related resources
+    setTimeout(() => refreshAll(), 500);
     return created;
-  }, [store, addLogEntry]);
+  }, [store, addLogEntry, refreshAll]);
 
   const updateModelAPI = useCallback(async (api: ModelAPI): Promise<ModelAPI> => {
     const updated = await k8sClient.updateModelAPI(api);
     store.updateModelAPI(updated.metadata.name, updated);
     addLogEntry('info', `Updated ModelAPI ${updated.metadata.name}`, 'api', updated.metadata.name, 'ModelAPI');
+    // Trigger refresh to sync all related resources
+    setTimeout(() => refreshAll(), 500);
     return updated;
-  }, [store, addLogEntry]);
+  }, [store, addLogEntry, refreshAll]);
 
   const deleteModelAPI = useCallback(async (name: string, namespace?: string): Promise<void> => {
     await k8sClient.deleteModelAPI(name, namespace);
     store.deleteModelAPI(name);
     addLogEntry('info', `Deleted ModelAPI ${name}`, 'api', name, 'ModelAPI');
-  }, [store, addLogEntry]);
+    // Trigger refresh to sync all related resources
+    setTimeout(() => refreshAll(), 500);
+  }, [store, addLogEntry, refreshAll]);
 
   const createMCPServer = useCallback(async (server: MCPServer): Promise<MCPServer> => {
     const created = await k8sClient.createMCPServer(server);
     store.addMCPServer(created);
     addLogEntry('info', `Created MCPServer ${created.metadata.name}`, 'api', created.metadata.name, 'MCPServer');
+    setTimeout(() => refreshAll(), 500);
     return created;
-  }, [store, addLogEntry]);
+  }, [store, addLogEntry, refreshAll]);
 
   const updateMCPServer = useCallback(async (server: MCPServer): Promise<MCPServer> => {
     const updated = await k8sClient.updateMCPServer(server);
     store.updateMCPServer(updated.metadata.name, updated);
     addLogEntry('info', `Updated MCPServer ${updated.metadata.name}`, 'api', updated.metadata.name, 'MCPServer');
+    setTimeout(() => refreshAll(), 500);
     return updated;
-  }, [store, addLogEntry]);
+  }, [store, addLogEntry, refreshAll]);
 
   const deleteMCPServer = useCallback(async (name: string, namespace?: string): Promise<void> => {
     await k8sClient.deleteMCPServer(name, namespace);
     store.deleteMCPServer(name);
     addLogEntry('info', `Deleted MCPServer ${name}`, 'api', name, 'MCPServer');
-  }, [store, addLogEntry]);
+    setTimeout(() => refreshAll(), 500);
+  }, [store, addLogEntry, refreshAll]);
 
   const createAgent = useCallback(async (agent: Agent): Promise<Agent> => {
     const created = await k8sClient.createAgent(agent);
     store.addAgent(created);
     addLogEntry('info', `Created Agent ${created.metadata.name}`, 'api', created.metadata.name, 'Agent');
+    setTimeout(() => refreshAll(), 500);
     return created;
-  }, [store, addLogEntry]);
+  }, [store, addLogEntry, refreshAll]);
 
   const updateAgent = useCallback(async (agent: Agent): Promise<Agent> => {
     const updated = await k8sClient.updateAgent(agent);
     store.updateAgent(updated.metadata.name, updated);
     addLogEntry('info', `Updated Agent ${updated.metadata.name}`, 'api', updated.metadata.name, 'Agent');
+    setTimeout(() => refreshAll(), 500);
     return updated;
-  }, [store, addLogEntry]);
+  }, [store, addLogEntry, refreshAll]);
 
   const deleteAgent = useCallback(async (name: string, namespace?: string): Promise<void> => {
     await k8sClient.deleteAgent(name, namespace);
     store.deleteAgent(name);
     addLogEntry('info', `Deleted Agent ${name}`, 'api', name, 'Agent');
-  }, [store, addLogEntry]);
+    setTimeout(() => refreshAll(), 500);
+  }, [store, addLogEntry, refreshAll]);
 
   // Secret operations
   const createSecret = useCallback(async (secret: K8sSecret): Promise<K8sSecret> => {
@@ -410,6 +475,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     };
     store.addSecret(secretWithKeys);
     addLogEntry('info', `Created Secret ${created.metadata.name}`, 'api', created.metadata.name, 'Secret');
+    setTimeout(() => refreshAll(), 500);
     return secretWithKeys;
   }, [store, addLogEntry]);
 
@@ -417,7 +483,8 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     await k8sClient.deleteSecret(name, namespace);
     store.deleteSecret(name);
     addLogEntry('info', `Deleted Secret ${name}`, 'api', name, 'Secret');
-  }, [store, addLogEntry]);
+    setTimeout(() => refreshAll(), 500);
+  }, [store, addLogEntry, refreshAll]);
 
   const value: KubernetesConnectionContextType = {
     ...state,
