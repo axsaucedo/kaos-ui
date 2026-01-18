@@ -52,11 +52,33 @@ function safeContentToString(content: unknown): string {
   return String(content);
 }
 
+// Preprocess markdown to ensure proper formatting
+// Markdown requires blank lines before lists and other block elements
+function preprocessMarkdown(content: string): string {
+  let processed = content;
+  
+  // Ensure blank line before unordered list items (*, -, +)
+  // Match a non-empty line followed by a list item without a blank line between
+  processed = processed.replace(/([^\n])\n(\s*[\*\-\+]\s)/g, '$1\n\n$2');
+  
+  // Ensure blank line before numbered list items
+  processed = processed.replace(/([^\n])\n(\s*\d+\.\s)/g, '$1\n\n$2');
+  
+  // Ensure blank line before headings
+  processed = processed.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
+  
+  // Ensure blank line before code blocks
+  processed = processed.replace(/([^\n])\n(```)/g, '$1\n\n$2');
+  
+  return processed;
+}
+
 export function ChatMessage({ role, content, isStreaming, timestamp }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   
-  // Ensure content is always a string
+  // Ensure content is always a string and properly formatted for markdown
   const safeContent = safeContentToString(content);
+  const processedContent = preprocessMarkdown(safeContent);
   
   const isAssistant = role === 'assistant';
   const { isError, errorType } = isAssistant ? detectError(safeContent) : { isError: false, errorType: '' };
@@ -147,7 +169,7 @@ export function ChatMessage({ role, content, isStreaming, timestamp }: ChatMessa
               hr: () => <hr className="my-4 border-border" />,
             }}
           >
-            {safeContent}
+            {processedContent}
           </ReactMarkdown>
           {isStreaming && !isError && (
             <span className="inline-block w-2 h-4 ml-0.5 bg-agent/60 animate-pulse" />
