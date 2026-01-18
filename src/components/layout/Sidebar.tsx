@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   Box,
@@ -50,6 +51,8 @@ const toolItems: NavItem[] = [
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const { activeTab, setActiveTab, modelAPIs, mcpServers, agents, pods, secrets } = useKubernetesStore();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const getResourceCount = (id: string): number | undefined => {
     switch (id) {
@@ -62,6 +65,26 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     }
   };
 
+  // Map tab IDs to URL tab params for navigation
+  const getTabParam = (id: string): string => {
+    switch (id) {
+      case 'model-apis': return 'modelapis';
+      case 'mcp-servers': return 'mcpservers';
+      case 'overview': return 'overview';
+      case 'visual-editor': return 'visual-editor';
+      default: return id;
+    }
+  };
+
+  const handleNavClick = (itemId: string) => {
+    setActiveTab(itemId);
+    // If we're on a detail page, navigate back to the main dashboard with the appropriate tab
+    const path = location.pathname;
+    if (path !== '/' && !path.startsWith('/?')) {
+      navigate(`/?tab=${getTabParam(itemId)}`);
+    }
+  };
+
   const renderNavItem = (item: NavItem) => {
     const isActive = activeTab === item.id;
     const count = getResourceCount(item.id);
@@ -70,7 +93,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     return (
       <button
         key={item.id}
-        onClick={() => setActiveTab(item.id)}
+        onClick={() => handleNavClick(item.id)}
         className={cn(
           'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg transition-all duration-200 group',
           isActive
@@ -107,7 +130,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
         {!collapsed && (
           <button 
-            onClick={() => setActiveTab('overview')}
+            onClick={() => handleNavClick('overview')}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             title="Go to Overview"
           >
@@ -122,7 +145,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
         {collapsed && (
           <button
-            onClick={() => setActiveTab('overview')}
+            onClick={() => handleNavClick('overview')}
             className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center hover:opacity-80 transition-opacity mx-auto"
             title="Go to Overview"
           >
@@ -144,7 +167,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Quick Create */}
         {!collapsed && (
           <Button
-            onClick={() => setActiveTab('visual-editor')}
+            onClick={() => handleNavClick('visual-editor')}
             className="w-full justify-start gap-2"
             size="sm"
           >
@@ -154,7 +177,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         )}
         {collapsed && (
           <Button
-            onClick={() => setActiveTab('visual-editor')}
+            onClick={() => handleNavClick('visual-editor')}
             size="icon"
             className="w-full"
           >

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Box, Edit, Trash2, RefreshCw, Info, Boxes, FileCode } from 'lucide-react';
+import { ArrowLeft, Box, Edit, Trash2, RefreshCw, Info, Boxes, FileCode, Stethoscope } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -20,6 +20,7 @@ import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { ModelAPIOverview } from '@/components/modelapi/ModelAPIOverview';
 import { ModelAPIPods } from '@/components/modelapi/ModelAPIPods';
+import { ModelAPIDiagnostics } from '@/components/modelapi/ModelAPIDiagnostics';
 import { ModelAPIEditDialog } from '@/components/resources/ModelAPIEditDialog';
 import { YamlViewer } from '@/components/shared/YamlViewer';
 import type { ModelAPI } from '@/types/kubernetes';
@@ -189,10 +190,14 @@ export default function ModelAPIDetail() {
 
       {/* Tabs Content */}
       <Tabs value={currentTab} onValueChange={setCurrentTab} className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
+        <TabsList className="grid w-full max-w-lg grid-cols-4">
           <TabsTrigger value="overview" className="flex items-center gap-1">
             <Info className="h-3 w-3" />
             Overview
+          </TabsTrigger>
+          <TabsTrigger value="diagnostics" className="flex items-center gap-1">
+            <Stethoscope className="h-3 w-3" />
+            Diagnostics
           </TabsTrigger>
           <TabsTrigger value="pods" className="flex items-center gap-1">
             <Boxes className="h-3 w-3" />
@@ -206,6 +211,10 @@ export default function ModelAPIDetail() {
 
         <TabsContent value="overview" className="space-y-6">
           <ModelAPIOverview modelAPI={modelAPI} />
+        </TabsContent>
+
+        <TabsContent value="diagnostics" className="space-y-6">
+          <ModelAPIDiagnostics modelAPI={modelAPI} />
         </TabsContent>
 
         <TabsContent value="pods" className="space-y-6">

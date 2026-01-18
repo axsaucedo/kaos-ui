@@ -266,22 +266,50 @@ export default function PodDetail() {
               </CardContent>
             </Card>
 
-            {/* Exec Command */}
+            {/* Container Command & Args */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Exec Command</CardTitle>
+                <CardTitle className="text-base">Container Command & Args</CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Use this command to exec into the pod:
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="flex-1 bg-muted p-3 rounded-md font-mono text-xs break-all">
-                    kubectl exec -it -n {namespace} {name} {selectedContainer ? `-c ${selectedContainer}` : ''} -- /bin/sh
-                  </code>
-                  <Button variant="outline" size="icon" onClick={copyExecCommand}>
-                    {copiedCommand ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
-                  </Button>
+              <CardContent className="space-y-4">
+                {pod.spec.containers.map((container) => (
+                  <div key={container.name} className="space-y-2">
+                    {containers.length > 1 && (
+                      <p className="text-sm font-medium text-muted-foreground">{container.name}</p>
+                    )}
+                    <div className="space-y-2">
+                      {container.command && container.command.length > 0 && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Command:</span>
+                          <code className="block bg-muted p-2 rounded-md font-mono text-xs break-all mt-1">
+                            {container.command.join(' ')}
+                          </code>
+                        </div>
+                      )}
+                      {container.args && container.args.length > 0 && (
+                        <div>
+                          <span className="text-xs text-muted-foreground">Args:</span>
+                          <code className="block bg-muted p-2 rounded-md font-mono text-xs break-all mt-1">
+                            {container.args.join(' ')}
+                          </code>
+                        </div>
+                      )}
+                      {(!container.command || container.command.length === 0) && (!container.args || container.args.length === 0) && (
+                        <p className="text-xs text-muted-foreground italic">Using image default entrypoint</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-border">
+                  <p className="text-xs text-muted-foreground mb-2">Exec into pod:</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 bg-muted p-2 rounded-md font-mono text-xs break-all">
+                      kubectl exec -it -n {namespace} {name} {selectedContainer ? `-c ${selectedContainer}` : ''} -- /bin/sh
+                    </code>
+                    <Button variant="outline" size="icon" onClick={copyExecCommand}>
+                      {copiedCommand ? <Check className="h-4 w-4 text-success" /> : <Copy className="h-4 w-4" />}
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
