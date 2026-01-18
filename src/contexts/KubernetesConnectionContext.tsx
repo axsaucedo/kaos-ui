@@ -260,6 +260,10 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     if (!state.connected || !state.baseUrl) return;
     
     console.log('[KubernetesConnectionContext] Switching to namespace:', newNamespace);
+    
+    // Clear all resources immediately to avoid stale data
+    store.clearAllResources();
+    
     k8sClient.setConfig({ baseUrl: state.baseUrl, namespace: newNamespace });
     setState(s => ({ ...s, namespace: newNamespace }));
     
@@ -269,7 +273,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     // Refresh resources for new namespace
     await refreshAll();
     addLogEntry('info', `Switched to namespace ${newNamespace}`, 'connection');
-  }, [state.connected, state.baseUrl, refreshAll, addLogEntry]);
+  }, [state.connected, state.baseUrl, refreshAll, addLogEntry, store]);
 
   // Disconnect
   const disconnect = useCallback(() => {

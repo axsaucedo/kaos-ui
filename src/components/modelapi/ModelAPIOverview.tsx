@@ -3,6 +3,7 @@ import { Box, Globe, Settings, Activity, Clock, Tag } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { DeploymentStatusCard } from '@/components/shared/DeploymentStatusCard';
 import type { ModelAPI } from '@/types/kubernetes';
 
 interface ModelAPIOverviewProps {
@@ -158,6 +159,14 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Deployment Status */}
+      {modelAPI.status?.deployment && (
+        <DeploymentStatusCard 
+          deployment={modelAPI.status.deployment} 
+          className="md:col-span-2"
+        />
+      )}
 
       {/* Configuration */}
       <Card className="md:col-span-2">

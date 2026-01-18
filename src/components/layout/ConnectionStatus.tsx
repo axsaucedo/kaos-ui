@@ -1,5 +1,6 @@
-import React from 'react';
+
 import { ChevronDown, Server } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { cn } from '@/lib/utils';
 import {
@@ -19,6 +20,8 @@ import {
 
 export function ConnectionStatus() {
   const { connected, connecting, namespace, namespaces, baseUrl, error, switchNamespace } = useKubernetesConnection();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   // Truncate baseUrl for display
   const truncatedUrl = baseUrl ? (baseUrl.length > 30 ? baseUrl.slice(0, 30) + '...' : baseUrl) : 'Not connected';
@@ -127,7 +130,15 @@ export function ConnectionStatus() {
           namespaces.map((ns) => (
             <DropdownMenuItem
               key={ns}
-              onClick={() => switchNamespace(ns)}
+              onClick={() => {
+                switchNamespace(ns);
+                // Navigate away from detail pages to prevent viewing stale resources
+                const path = location.pathname;
+                if (path.startsWith('/agents/')) navigate('/?tab=agents');
+                else if (path.startsWith('/mcpservers/')) navigate('/?tab=mcpservers');
+                else if (path.startsWith('/modelapis/')) navigate('/?tab=modelapis');
+                else if (path.startsWith('/pods/')) navigate('/?tab=pods');
+              }}
               className={cn(
                 "font-mono text-sm cursor-pointer",
                 ns === namespace && "bg-accent text-accent-foreground"

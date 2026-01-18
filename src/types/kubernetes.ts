@@ -82,6 +82,20 @@ export interface ModelAPISpec {
   podSpec?: Record<string, unknown>;
 }
 
+// DeploymentStatusInfo mirrors key status fields from underlying Kubernetes Deployment
+export interface DeploymentStatusInfo {
+  replicas?: number;
+  readyReplicas?: number;
+  availableReplicas?: number;
+  updatedReplicas?: number;
+  conditions?: {
+    type: string;
+    status: string;
+    reason?: string;
+    message?: string;
+  }[];
+}
+
 export interface ModelAPIStatus {
   // Phase of the deployment (Pending, Ready, Failed)
   phase?: string;
@@ -91,6 +105,8 @@ export interface ModelAPIStatus {
   endpoint?: string;
   // Message provides additional status information
   message?: string;
+  // Deployment status for rolling update visibility
+  deployment?: DeploymentStatusInfo;
 }
 
 export interface ModelAPI {
@@ -147,6 +163,8 @@ export interface MCPServerStatus {
   availableTools?: string[];
   // Message provides additional status information
   message?: string;
+  // Deployment status for rolling update visibility
+  deployment?: DeploymentStatusInfo;
 }
 
 export interface MCPServer {
@@ -207,6 +225,8 @@ export interface AgentStatus {
   linkedResources?: Record<string, string>;
   // Message provides additional status information
   message?: string;
+  // Deployment status for rolling update visibility
+  deployment?: DeploymentStatusInfo;
 }
 
 export interface Agent {

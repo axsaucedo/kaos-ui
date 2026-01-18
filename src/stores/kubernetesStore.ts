@@ -49,17 +49,17 @@ interface KubernetesState {
   nextRefreshTime: number | null; // timestamp when next refresh will occur
   
   // Actions
-  setModelAPIs: (apis: ModelAPI[]) => void;
+  setModelAPIs: (apis: ModelAPI[], forceReplace?: boolean) => void;
   addModelAPI: (api: ModelAPI) => void;
   updateModelAPI: (name: string, api: Partial<ModelAPI>) => void;
   deleteModelAPI: (name: string) => void;
   
-  setMCPServers: (servers: MCPServer[]) => void;
+  setMCPServers: (servers: MCPServer[], forceReplace?: boolean) => void;
   addMCPServer: (server: MCPServer) => void;
   updateMCPServer: (name: string, server: Partial<MCPServer>) => void;
   deleteMCPServer: (name: string) => void;
   
-  setAgents: (agents: Agent[]) => void;
+  setAgents: (agents: Agent[], forceReplace?: boolean) => void;
   addAgent: (agent: Agent) => void;
   updateAgent: (name: string, agent: Partial<Agent>) => void;
   deleteAgent: (name: string) => void;
@@ -77,6 +77,9 @@ interface KubernetesState {
   setSecrets: (secrets: K8sSecret[]) => void;
   addSecret: (secret: K8sSecret) => void;
   deleteSecret: (name: string) => void;
+  
+  // Clear all resources (for namespace switching)
+  clearAllResources: () => void;
   
   addLog: (log: LogEntry) => void;
   clearLogs: () => void;
@@ -133,10 +136,10 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   isRefreshing: false,
   nextRefreshTime: null,
   
-  // ModelAPI actions - merge instead of replace to avoid flickering on detail pages
-  setModelAPIs: (apis) => set((state) => {
-    // If empty array from API, keep existing until we have data
-    if (apis.length === 0 && state.modelAPIs.length > 0) {
+  // ModelAPI actions - forceReplace used during namespace switching
+  setModelAPIs: (apis, forceReplace = false) => set((state) => {
+    // If empty array from API, keep existing unless force replace (namespace switch)
+    if (!forceReplace && apis.length === 0 && state.modelAPIs.length > 0) {
       return state;
     }
     return { modelAPIs: apis };
@@ -149,9 +152,9 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
     modelAPIs: state.modelAPIs.filter((a) => a.metadata.name !== name),
   })),
   
-  // MCPServer actions - merge instead of replace to avoid flickering on detail pages
-  setMCPServers: (servers) => set((state) => {
-    if (servers.length === 0 && state.mcpServers.length > 0) {
+  // MCPServer actions - forceReplace used during namespace switching
+  setMCPServers: (servers, forceReplace = false) => set((state) => {
+    if (!forceReplace && servers.length === 0 && state.mcpServers.length > 0) {
       return state;
     }
     return { mcpServers: servers };
@@ -164,9 +167,9 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
     mcpServers: state.mcpServers.filter((s) => s.metadata.name !== name),
   })),
   
-  // Agent actions - merge instead of replace to avoid flickering on detail pages
-  setAgents: (agents) => set((state) => {
-    if (agents.length === 0 && state.agents.length > 0) {
+  // Agent actions - forceReplace used during namespace switching
+  setAgents: (agents, forceReplace = false) => set((state) => {
+    if (!forceReplace && agents.length === 0 && state.agents.length > 0) {
       return state;
     }
     return { agents };
@@ -178,6 +181,18 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   deleteAgent: (name) => set((state) => ({
     agents: state.agents.filter((a) => a.metadata.name !== name),
   })),
+  
+  // Clear all resources for namespace switching
+  clearAllResources: () => set({
+    modelAPIs: [],
+    mcpServers: [],
+    agents: [],
+    pods: [],
+    deployments: [],
+    pvcs: [],
+    services: [],
+    secrets: [],
+  }),
   
   // K8s resources
   setPods: (pods) => set({ pods }),

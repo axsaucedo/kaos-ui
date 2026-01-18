@@ -3,6 +3,7 @@ import { Server, Package, Code, Globe, Activity, Clock, Tag } from 'lucide-react
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
+import { DeploymentStatusCard } from '@/components/shared/DeploymentStatusCard';
 import type { MCPServer } from '@/types/kubernetes';
 
 interface MCPServerOverviewProps {
@@ -147,6 +148,14 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Deployment Status */}
+      {mcpServer.status?.deployment && (
+        <DeploymentStatusCard 
+          deployment={mcpServer.status.deployment} 
+          className="md:col-span-2"
+        />
+      )}
 
       {/* Tools Configuration */}
       <Card className="md:col-span-2">

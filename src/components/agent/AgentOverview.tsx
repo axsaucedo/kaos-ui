@@ -3,6 +3,7 @@ import { Bot, Server, Network, Clock, Tag, FileCode, Settings, Activity, Globe }
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { DeploymentStatusCard } from '@/components/shared/DeploymentStatusCard';
 import type { Agent } from '@/types/kubernetes';
 
 interface AgentOverviewProps {
@@ -125,6 +126,14 @@ export function AgentOverview({ agent }: AgentOverviewProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Deployment Status */}
+      {status?.deployment && (
+        <DeploymentStatusCard 
+          deployment={status.deployment} 
+          className="md:col-span-2"
+        />
+      )}
 
       {/* Model Configuration */}
       <Card>
