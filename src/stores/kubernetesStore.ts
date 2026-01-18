@@ -9,8 +9,6 @@ import type {
   Service,
   K8sSecret,
   LogEntry,
-  CanvasNode,
-  CanvasConnection,
   ResourceStatus,
 } from '@/types/kubernetes';
 
@@ -29,13 +27,6 @@ interface KubernetesState {
   
   // Logs
   logs: LogEntry[];
-  
-  // Canvas state
-  canvasNodes: CanvasNode[];
-  canvasConnections: CanvasConnection[];
-  selectedNodeId: string | null;
-  canvasZoom: number;
-  canvasPan: { x: number; y: number };
   
   // UI State
   selectedResource: any | null;
@@ -84,16 +75,6 @@ interface KubernetesState {
   addLog: (log: LogEntry) => void;
   clearLogs: () => void;
   
-  // Canvas actions
-  addCanvasNode: (node: CanvasNode) => void;
-  updateCanvasNode: (id: string, updates: Partial<CanvasNode>) => void;
-  removeCanvasNode: (id: string) => void;
-  setSelectedNode: (id: string | null) => void;
-  addCanvasConnection: (connection: CanvasConnection) => void;
-  removeCanvasConnection: (id: string) => void;
-  setCanvasZoom: (zoom: number) => void;
-  setCanvasPan: (pan: { x: number; y: number }) => void;
-  
   setSelectedResource: (resource: any | null) => void;
   setSelectedResourceMode: (mode: 'view' | 'edit' | null) => void;
   setActiveTab: (tab: string) => void;
@@ -119,12 +100,6 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   services: [],
   secrets: [],
   logs: [],
-  
-  canvasNodes: [],
-  canvasConnections: [],
-  selectedNodeId: null,
-  canvasZoom: 1,
-  canvasPan: { x: 0, y: 0 },
   
   selectedResource: null,
   selectedResourceMode: null,
@@ -214,23 +189,6 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   // Logs
   addLog: (log) => set((state) => ({ logs: [log, ...state.logs].slice(0, 1000) })),
   clearLogs: () => set({ logs: [] }),
-  
-  // Canvas actions
-  addCanvasNode: (node) => set((state) => ({ canvasNodes: [...state.canvasNodes, node] })),
-  updateCanvasNode: (id, updates) => set((state) => ({
-    canvasNodes: state.canvasNodes.map((n) => n.id === id ? { ...n, ...updates } : n),
-  })),
-  removeCanvasNode: (id) => set((state) => ({
-    canvasNodes: state.canvasNodes.filter((n) => n.id !== id),
-    canvasConnections: state.canvasConnections.filter((c) => c.sourceId !== id && c.targetId !== id),
-  })),
-  setSelectedNode: (id) => set({ selectedNodeId: id }),
-  addCanvasConnection: (connection) => set((state) => ({ canvasConnections: [...state.canvasConnections, connection] })),
-  removeCanvasConnection: (id) => set((state) => ({
-    canvasConnections: state.canvasConnections.filter((c) => c.id !== id),
-  })),
-  setCanvasZoom: (zoom) => set({ canvasZoom: zoom }),
-  setCanvasPan: (pan) => set({ canvasPan: pan }),
   
   setSelectedResource: (resource) => set({ selectedResource: resource }),
   setSelectedResourceMode: (mode) => set({ selectedResourceMode: mode }),

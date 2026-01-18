@@ -7,12 +7,9 @@ import {
   Bot,
   Boxes,
   KeyRound,
-  FileText,
   Settings,
-  Plus,
   ChevronLeft,
   ChevronRight,
-  Workflow,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -34,7 +31,6 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'visual-editor', label: 'Visual Editor', icon: Workflow },
   { id: 'model-apis', label: 'Model APIs', icon: Box },
   { id: 'mcp-servers', label: 'MCP Servers', icon: Server },
   { id: 'agents', label: 'Agents', icon: Bot },
@@ -71,7 +67,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       case 'model-apis': return 'modelapis';
       case 'mcp-servers': return 'mcpservers';
       case 'overview': return 'overview';
-      case 'visual-editor': return 'visual-editor';
       default: return id;
     }
   };
@@ -164,27 +159,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
-        {/* Quick Create */}
-        {!collapsed && (
-          <Button
-            onClick={() => handleNavClick('visual-editor')}
-            className="w-full justify-start gap-2"
-            size="sm"
-          >
-            <Plus className="h-4 w-4" />
-            Create Resource
-          </Button>
-        )}
-        {collapsed && (
-          <Button
-            onClick={() => handleNavClick('visual-editor')}
-            size="icon"
-            className="w-full"
-          >
-            <Plus className="h-4 w-4" />
-          </Button>
-        )}
-
         {/* Main Navigation */}
         <div className="space-y-1">
           {!collapsed && (

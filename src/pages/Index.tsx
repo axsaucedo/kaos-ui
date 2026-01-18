@@ -1,5 +1,4 @@
 import { OverviewDashboard } from '@/components/dashboard/OverviewDashboard';
-import { VisualCanvas } from '@/components/canvas/VisualCanvas';
 import { ModelAPIList } from '@/components/resources/ModelAPIList';
 import { MCPServerList } from '@/components/resources/MCPServerList';
 import { AgentList } from '@/components/resources/AgentList';
@@ -30,7 +29,6 @@ function IndexContent() {
   const renderContent = () => {
     switch (activeTab) {
       case 'overview': return <OverviewDashboard />;
-      case 'visual-editor': return <VisualCanvas />;
       case 'model-apis': return <ModelAPIList />;
       case 'mcp-servers': return <MCPServerList />;
       case 'agents': return <AgentList />;
