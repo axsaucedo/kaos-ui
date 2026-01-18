@@ -90,7 +90,7 @@ Check browser console for additional logs.
     const report = this.getErrorReport();
     const title = encodeURIComponent(`[Bug] Application crash: ${this.state.error?.message?.substring(0, 50) || 'Unknown error'}`);
     const body = encodeURIComponent(report);
-    const url = `https://github.com/your-org/kaos-ui/issues/new?title=${title}&body=${body}&labels=bug`;
+    const url = `https://github.com/axsaucedo/kaos-ui/issues/new?title=${title}&body=${body}&labels=bug`;
     window.open(url, '_blank');
   };
 

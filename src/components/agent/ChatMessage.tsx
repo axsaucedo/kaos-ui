@@ -32,14 +32,35 @@ function detectError(content: string): { isError: boolean; errorType: string } {
   return { isError: false, errorType: '' };
 }
 
+// Safely convert content to string, handling objects
+function safeContentToString(content: unknown): string {
+  if (content === null || content === undefined) {
+    return '';
+  }
+  if (typeof content === 'string') {
+    return content;
+  }
+  if (typeof content === 'object') {
+    try {
+      return JSON.stringify(content, null, 2);
+    } catch {
+      return '[Object]';
+    }
+  }
+  return String(content);
+}
+
 export function ChatMessage({ role, content, isStreaming, timestamp }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
   
+  // Ensure content is always a string
+  const safeContent = safeContentToString(content);
+  
   const isAssistant = role === 'assistant';
-  const { isError, errorType } = isAssistant ? detectError(content) : { isError: false, errorType: '' };
+  const { isError, errorType } = isAssistant ? detectError(safeContent) : { isError: false, errorType: '' };
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(content);
+    await navigator.clipboard.writeText(safeContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -98,7 +119,7 @@ export function ChatMessage({ role, content, isStreaming, timestamp }: ChatMessa
             "whitespace-pre-wrap leading-relaxed",
             isError ? "text-destructive/80" : "text-foreground/90"
           )}>
-            {content}
+            {safeContent}
             {isStreaming && !isError && (
               <span className="inline-block w-2 h-4 ml-0.5 bg-agent/60 animate-pulse" />
             )}
@@ -113,7 +134,7 @@ export function ChatMessage({ role, content, isStreaming, timestamp }: ChatMessa
         )}
 
         {/* Actions */}
-        {content && !isStreaming && (
+        {safeContent && !isStreaming && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity pt-2">
             <Button
               variant="ghost"

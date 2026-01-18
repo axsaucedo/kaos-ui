@@ -123,6 +123,24 @@ export function AgentMemory({ agent }: AgentMemoryProps) {
     }
   };
 
+  // Safely convert content to string for rendering
+  const safeContentToString = (content: unknown): string => {
+    if (content === null || content === undefined) {
+      return '';
+    }
+    if (typeof content === 'string') {
+      return content;
+    }
+    if (typeof content === 'object') {
+      try {
+        return JSON.stringify(content, null, 2);
+      } catch {
+        return '[Object]';
+      }
+    }
+    return String(content);
+  };
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -224,8 +242,8 @@ export function AgentMemory({ agent }: AgentMemoryProps) {
                           
                           {/* Content */}
                           {event.content && (
-                            <p className="text-sm whitespace-pre-wrap break-words">
-                              {event.content}
+                            <p className="text-sm whitespace-pre-wrap break-words font-mono">
+                              {safeContentToString(event.content)}
                             </p>
                           )}
                           
