@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Bot, User, Copy, Check, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 interface ChatMessageProps {
   role: 'user' | 'assistant' | 'system';
@@ -113,17 +113,31 @@ export function ChatMessage({ role, content, isStreaming, timestamp }: ChatMessa
 
         <div className={cn(
           "prose prose-sm dark:prose-invert max-w-none",
-          isError && "text-destructive/90"
+          "prose-headings:text-foreground prose-p:text-foreground/90",
+          "prose-strong:text-foreground prose-code:text-primary prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded",
+          "prose-pre:bg-muted prose-pre:border prose-pre:border-border",
+          "prose-ul:text-foreground/90 prose-ol:text-foreground/90 prose-li:text-foreground/90",
+          "prose-a:text-primary prose-a:underline",
+          isError && "prose-p:text-destructive/80 prose-headings:text-destructive"
         )}>
-          <p className={cn(
-            "whitespace-pre-wrap leading-relaxed",
-            isError ? "text-destructive/80" : "text-foreground/90"
-          )}>
+          <ReactMarkdown
+            components={{
+              p: ({ children }) => <p className="leading-relaxed mb-2 last:mb-0">{children}</p>,
+              code: ({ children, className }) => {
+                const isBlock = className?.includes('language-');
+                return isBlock ? (
+                  <code className={cn("block overflow-x-auto", className)}>{children}</code>
+                ) : (
+                  <code className="text-sm">{children}</code>
+                );
+              },
+            }}
+          >
             {safeContent}
-            {isStreaming && !isError && (
-              <span className="inline-block w-2 h-4 ml-0.5 bg-agent/60 animate-pulse" />
-            )}
-          </p>
+          </ReactMarkdown>
+          {isStreaming && !isError && (
+            <span className="inline-block w-2 h-4 ml-0.5 bg-agent/60 animate-pulse" />
+          )}
         </div>
 
         {/* Error hint */}
