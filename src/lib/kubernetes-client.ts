@@ -1081,6 +1081,8 @@ class KubernetesClient {
             }
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
+              // Debug: log content with escaped newlines to see if they're present
+              console.log('[k8sClient] SSE chunk content:', JSON.stringify(content));
               onChunk(content);
             }
           } catch (e) {
