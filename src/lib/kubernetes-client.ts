@@ -1058,7 +1058,13 @@ class KubernetesClient {
           break;
         }
 
-        buffer += decoder.decode(value, { stream: true });
+        const rawChunk = decoder.decode(value, { stream: true });
+        // Debug: log raw SSE chunk to see exactly what comes from wire
+        console.log('[k8sClient] Raw SSE chunk:', JSON.stringify(rawChunk).substring(0, 500));
+        buffer += rawChunk;
+        
+        // SSE uses double newline to separate events, but data lines end with single \n
+        // We need to be careful not to split content that contains \n
         const lines = buffer.split('\n');
         buffer = lines.pop() || '';
 
@@ -1081,8 +1087,12 @@ class KubernetesClient {
             }
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
-              // Debug: log content with escaped newlines to see if they're present
-              console.log('[k8sClient] SSE chunk content:', JSON.stringify(content));
+              // Debug: log content with any newlines visible
+              if (content.includes('\n')) {
+                console.log('[k8sClient] SSE chunk HAS NEWLINES:', JSON.stringify(content));
+              } else {
+                console.log('[k8sClient] SSE chunk (no newlines):', content.substring(0, 100));
+              }
               onChunk(content);
             }
           } catch (e) {
