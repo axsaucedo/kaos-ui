@@ -359,15 +359,17 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
 
   // Auto-connect on mount if saved config exists or URL param is provided
   useEffect(() => {
-    // Check for kubernetesUrl query parameter first
+    // Check for query parameters first
     const urlParams = new URLSearchParams(window.location.search);
     const urlKubernetesUrl = urlParams.get('kubernetesUrl');
+    const urlNamespace = urlParams.get('namespace');
     
     if (urlKubernetesUrl) {
-      console.log('[KubernetesConnectionContext] Found kubernetesUrl in URL params:', urlKubernetesUrl);
+      const targetNamespace = urlNamespace || 'default';
+      console.log('[KubernetesConnectionContext] Found kubernetesUrl in URL params:', urlKubernetesUrl, 'namespace:', targetNamespace);
       // Save to localStorage for future sessions
-      localStorage.setItem('k8s-config', JSON.stringify({ baseUrl: urlKubernetesUrl, namespace: 'default' }));
-      connect(urlKubernetesUrl, 'default');
+      localStorage.setItem('k8s-config', JSON.stringify({ baseUrl: urlKubernetesUrl, namespace: targetNamespace }));
+      connect(urlKubernetesUrl, targetNamespace);
       return;
     }
     
@@ -376,9 +378,11 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     if (savedConfig) {
       try {
         const config = JSON.parse(savedConfig);
-        console.log('[KubernetesConnectionContext] Found saved config:', config);
+        // If namespace is provided in URL, override the saved config
+        const targetNamespace = urlNamespace || config.namespace || 'default';
+        console.log('[KubernetesConnectionContext] Found saved config:', config, 'using namespace:', targetNamespace);
         if (config.baseUrl) {
-          connect(config.baseUrl, config.namespace || 'default');
+          connect(config.baseUrl, targetNamespace);
           return;
         }
       } catch (e) {
@@ -387,8 +391,9 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     }
     
     // Default: try to connect to localhost:8010
-    console.log('[KubernetesConnectionContext] No saved config, attempting default localhost:8010');
-    connect('http://localhost:8010', 'default');
+    const targetNamespace = urlNamespace || 'default';
+    console.log('[KubernetesConnectionContext] No saved config, attempting default localhost:8010 with namespace:', targetNamespace);
+    connect('http://localhost:8010', targetNamespace);
     
     return () => stopPolling();
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps

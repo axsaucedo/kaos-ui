@@ -1,73 +1,273 @@
-# Welcome to your Lovable project
+<p align="center">
+  <img src="docs/screenshots/dashboard-overview.png" alt="KAOS Dashboard" width="800">
+</p>
 
-## Project info
+<h1 align="center">⚡ KAOS-UI</h1>
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+<p align="center">
+  <strong>Kubernetes Agent Orchestration System - User Interface</strong>
+  <br>
+  <em>A modern dashboard for managing AI agents, MCP servers, and Model APIs on Kubernetes</em>
+</p>
 
-## How can I edit this code?
+<p align="center">
+  <a href="#-features">Features</a> •
+  <a href="#-quick-start">Quick Start</a> •
+  <a href="#-demo">Demo</a> •
+  <a href="#-documentation">Documentation</a> •
+  <a href="#-deployment">Deployment</a>
+</p>
 
-There are several ways of editing your application.
+---
 
-**Use Lovable**
+## 🎯 What is KAOS?
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+**KAOS** (Kubernetes Agent Orchestration System) provides Kubernetes-native Custom Resource Definitions (CRDs) for deploying and managing:
 
-Changes made via Lovable will be committed automatically to this repo.
+- 🤖 **Agents** - Autonomous AI agents with memory, tools, and multi-agent hierarchies
+- 🔧 **MCP Servers** - Model Context Protocol servers for tool integrations
+- 🧠 **Model APIs** - LLM API endpoints with automatic scaling and load balancing
 
-**Use your preferred IDE**
+**KAOS-UI** is the web-based dashboard that provides real-time visibility and control over your agentic infrastructure.
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+---
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## ✨ Features
 
-Follow these steps:
+### 📊 Real-Time Dashboard
+- Live resource monitoring with auto-refresh
+- Pod health status and deployment state
+- Quick actions for common operations
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### 🤖 Agent Management
+| Feature | Description |
+|---------|-------------|
+| **Overview** | See agent configuration, status, and dependencies |
+| **Chat Interface** | Interact with agents directly through the UI |
+| **Memory Viewer** | Inspect agent memory and conversation history |
+| **Pod Management** | View logs, restart, and scale agent pods |
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### 🔧 MCP Server Management
+- Configure tool servers with environment variables
+- Monitor server health and connectivity
+- Debug tool calls with the built-in diagnostics panel
 
-# Step 3: Install the necessary dependencies.
-npm i
+### 🧠 Model API Management  
+- Deploy and configure LLM endpoints
+- Monitor API performance and latency
+- Configure gateway routes and replicas
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+### 🔐 Kubernetes Native
+- **Secrets Management** - Create, view, and delete K8s secrets
+- **Namespace Switching** - Seamlessly work across namespaces
+- **Pod Operations** - View logs, delete pods, monitor resources
+
+---
+
+## 🚀 Quick Start
+
+### Option 1: Use the Hosted Version
+
+Visit the live deployment and connect to your cluster:
+
+```
+https://axsaucedo.github.io/kaos-ui/?kubernetesUrl=YOUR_K8S_PROXY_URL&namespace=YOUR_NAMESPACE
+```
+
+**Query Parameters:**
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `kubernetesUrl` | URL to your Kubernetes API proxy | `http://localhost:8010` |
+| `namespace` | Default namespace to select | `default` |
+
+### Option 2: Run Locally
+
+```bash
+# Clone the repository
+git clone https://github.com/axsaucedo/kaos-ui.git
+cd kaos-ui
+
+# Install dependencies
+npm install
+
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Option 3: Connect to a Cluster
 
-**Use GitHub Codespaces**
+1. Set up `kubectl proxy` or use a CORS-enabled proxy:
+   ```bash
+   kubectl proxy --port=8010 --address=0.0.0.0 --accept-hosts='.*'
+   ```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+2. Open KAOS-UI and enter your proxy URL in Settings
 
-## What technologies are used for this project?
+---
 
-This project is built with:
+## 🎬 Demo
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### End-to-End Workflow
 
-## How can I deploy this project?
+This demo showcases a multi-agent hierarchy in the `kaos-hierarchy` namespace:
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+#### 1. Dashboard Overview
+The main dashboard provides at-a-glance visibility into all your agentic resources:
 
-## Can I connect a custom domain to my Lovable project?
+![Dashboard Overview](docs/screenshots/dashboard-overview.png)
 
-Yes, you can!
+#### 2. Agent Hierarchy
+Navigate complex multi-agent setups with supervisor/worker relationships:
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+<!-- Placeholder for actual screenshot -->
+*Screenshot: Navigate to Agents → Select an agent to view its configuration and dependencies*
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+#### 3. Agent Chat Interface
+Interact with deployed agents directly from the UI:
+
+<!-- Placeholder for actual screenshot -->
+*Screenshot: Use the Chat tab to send messages to your agent*
+
+#### 4. Memory Inspection
+Debug agent behavior by inspecting its memory state:
+
+<!-- Placeholder for actual screenshot -->
+*Screenshot: View agent memory entries and conversation history*
+
+#### 5. Pod Logs & Management
+Monitor and troubleshoot with real-time pod logs:
+
+<!-- Placeholder for actual screenshot -->
+*Screenshot: View streaming pod logs and restart containers*
+
+#### 6. Secret Management
+Securely manage API keys and credentials:
+
+<!-- Placeholder for actual screenshot -->
+*Screenshot: Create and manage Kubernetes secrets*
+
+---
+
+## 📖 Documentation
+
+Comprehensive documentation is available:
+
+| Document | Description |
+|----------|-------------|
+| [📱 UI Guide](docs/UI.md) | Complete guide to all screens and features |
+| [🔧 Configuration](docs/CONFIGURATION.md) | Connection settings and customization |
+| [🚀 Deployment](docs/DEPLOYMENT.md) | Deployment options and CI/CD |
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        KAOS-UI                              │
+│                   (React + TypeScript)                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │  Dashboard  │  │   Agents    │  │    MCP Servers      │ │
+│  │  Overview   │  │   Detail    │  │    Management       │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │  Model APIs │  │    Pods     │  │      Secrets        │ │
+│  │  Management │  │    & Logs   │  │    Management       │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+│                                                             │
+└───────────────────────────┬─────────────────────────────────┘
+                            │
+                            │ REST API
+                            ▼
+┌─────────────────────────────────────────────────────────────┐
+│                  Kubernetes Cluster                         │
+│                                                             │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
+│  │   Agent     │  │  MCPServer  │  │     ModelAPI        │ │
+│  │    CRD      │  │     CRD     │  │       CRD           │ │
+│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────────┐│
+│  │          KAOS Operator (controller-manager)             ││
+│  └─────────────────────────────────────────────────────────┘│
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🚢 Deployment
+
+### GitHub Pages (Default)
+
+The repository includes a GitHub Actions workflow for automatic deployment:
+
+```yaml
+# .github/workflows/deploy.yml
+# Triggers on push to main branch
+```
+
+### Custom Deployment
+
+Build the static files:
+
+```bash
+npm run build
+```
+
+Deploy the `dist/` folder to any static hosting service:
+- Netlify
+- Vercel
+- AWS S3 + CloudFront
+- Any web server
+
+---
+
+## 🛠️ Technology Stack
+
+| Technology | Purpose |
+|------------|---------|
+| **React 18** | UI framework |
+| **TypeScript** | Type safety |
+| **Vite** | Build tool |
+| **Tailwind CSS** | Styling |
+| **shadcn/ui** | Component library |
+| **Zustand** | State management |
+| **React Router** | Navigation |
+| **TanStack Query** | Data fetching |
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'feat: add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the Apache 2.0 License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+## 🔗 Links
+
+- [KAOS Operator](https://github.com/axsaucedo/kaos) - The Kubernetes operator
+- [MCP Protocol](https://modelcontextprotocol.io/) - Model Context Protocol specification
+- [Report Issues](https://github.com/axsaucedo/kaos-ui/issues) - Bug reports and feature requests
+
+---
+
+<p align="center">
+  <strong>Built with ❤️ for the AI Agent community</strong>
+</p>
