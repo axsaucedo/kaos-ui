@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AutoRefreshControl } from './AutoRefreshControl';
 import { ConnectionStatus } from './ConnectionStatus';
-import { NamespaceSelector } from './NamespaceSelector';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 
 export function Header() {
@@ -22,7 +21,7 @@ export function Header() {
 
       {/* Right side controls */}
       <div className="flex items-center gap-3">
-        {/* Connection Status */}
+        {/* Connection Status with Namespace Selector */}
         <ConnectionStatus />
 
         {/* Auto-Refresh Control (Grafana-style) */}
@@ -44,11 +43,6 @@ export function Header() {
             </svg>
           </a>
         </Button>
-
-        {/* Namespace Selector */}
-        <div className="flex items-center pl-2 border-l border-border">
-          <NamespaceSelector />
-        </div>
       </div>
     </header>
   );
