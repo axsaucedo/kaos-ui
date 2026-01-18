@@ -13,7 +13,7 @@ import { ModelAPIEditDialog } from '@/components/resources/ModelAPIEditDialog';
 import { MCPServerDetailDrawer } from '@/components/resources/MCPServerDetailDrawer';
 import { MCPServerEditDialog } from '@/components/resources/MCPServerEditDialog';
 import { PodsList } from '@/components/kubernetes/PodsList';
-import { DeploymentsList } from '@/components/kubernetes/DeploymentsList';
+import { SecretsList } from '@/components/kubernetes/SecretsList';
 import { VolumesList } from '@/components/kubernetes/VolumesList';
 import { SettingsPage } from '@/components/settings/SettingsPage';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
@@ -40,7 +40,7 @@ function IndexContent() {
       case 'mcp-servers': return <MCPServerList />;
       case 'agents': return <AgentList />;
       case 'pods': return <PodsList />;
-      case 'deployments': return <DeploymentsList />;
+      case 'secrets': return <SecretsList />;
       case 'volumes': return <VolumesList />;
       case 'settings': return <SettingsPage />;
       default: return <OverviewDashboard />;

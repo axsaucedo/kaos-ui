@@ -7,6 +7,7 @@ import type {
   Deployment,
   PersistentVolumeClaim,
   Service,
+  K8sSecret,
   LogEntry,
   CanvasNode,
   CanvasConnection,
@@ -24,6 +25,7 @@ interface KubernetesState {
   deployments: Deployment[];
   pvcs: PersistentVolumeClaim[];
   services: Service[];
+  secrets: K8sSecret[];
   
   // Logs
   logs: LogEntry[];
@@ -72,6 +74,9 @@ interface KubernetesState {
   setServices: (services: Service[]) => void;
   addService: (service: Service) => void;
   deleteService: (name: string) => void;
+  setSecrets: (secrets: K8sSecret[]) => void;
+  addSecret: (secret: K8sSecret) => void;
+  deleteSecret: (name: string) => void;
   
   addLog: (log: LogEntry) => void;
   clearLogs: () => void;
@@ -109,6 +114,7 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   deployments: [],
   pvcs: [],
   services: [],
+  secrets: [],
   logs: [],
   
   canvasNodes: [],
@@ -186,6 +192,9 @@ export const useKubernetesStore = create<KubernetesState>((set) => ({
   setServices: (services) => set({ services }),
   addService: (service) => set((state) => ({ services: [...state.services, service] })),
   deleteService: (name) => set((state) => ({ services: state.services.filter((s) => s.metadata.name !== name) })),
+  setSecrets: (secrets) => set({ secrets }),
+  addSecret: (secret) => set((state) => ({ secrets: [...state.secrets, secret] })),
+  deleteSecret: (name) => set((state) => ({ secrets: state.secrets.filter((s) => s.metadata.name !== name) })),
   
   // Logs
   addLog: (log) => set((state) => ({ logs: [log, ...state.logs].slice(0, 1000) })),

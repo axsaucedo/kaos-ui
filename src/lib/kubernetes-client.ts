@@ -434,14 +434,38 @@ class KubernetesClient {
 
   async listSecrets(namespace?: string): Promise<SecretRef[]> {
     const ns = namespace || this.config.namespace;
-    const response = await this.request<K8sListResponse<SecretRef>>(`/api/v1/namespaces/${ns}/secrets`);
-    // Return only metadata, not actual secret values
+    const response = await this.request<K8sListResponse<SecretRef & { data?: Record<string, string> }>>(`/api/v1/namespaces/${ns}/secrets`);
+    // Return only metadata and keys, not actual secret values
     return response.items.map(secret => ({
       apiVersion: secret.apiVersion,
       kind: secret.kind,
       metadata: secret.metadata,
       type: secret.type,
-    }));
+      // Include data keys for UI display without actual values
+      dataKeys: secret.data ? Object.keys(secret.data) : [],
+    })) as SecretRef[];
+  }
+
+  async createSecret(secret: { 
+    apiVersion: string; 
+    kind: string; 
+    metadata: { name: string; namespace: string }; 
+    type: string; 
+    data?: Record<string, string>;
+    stringData?: Record<string, string>;
+  }): Promise<SecretRef> {
+    const ns = secret.metadata.namespace || this.config.namespace;
+    return this.request<SecretRef>(`/api/v1/namespaces/${ns}/secrets`, {
+      method: 'POST',
+      body: JSON.stringify(secret),
+    });
+  }
+
+  async deleteSecret(name: string, namespace?: string): Promise<K8sStatus> {
+    const ns = namespace || this.config.namespace;
+    return this.request<K8sStatus>(`/api/v1/namespaces/${ns}/secrets/${name}`, {
+      method: 'DELETE',
+    });
   }
 
   // ============= Namespaces =============

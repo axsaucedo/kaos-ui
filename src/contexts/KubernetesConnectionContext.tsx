@@ -8,7 +8,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
 import { k8sClient } from '@/lib/kubernetes-client';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
-import type { ModelAPI, MCPServer, Agent, LogEntry, Service } from '@/types/kubernetes';
+import type { ModelAPI, MCPServer, Agent, LogEntry, Service, K8sSecret } from '@/types/kubernetes';
 
 interface ConnectionState {
   connected: boolean;
@@ -38,6 +38,9 @@ interface KubernetesConnectionContextType extends ConnectionState {
   createAgent: (agent: Agent) => Promise<Agent>;
   updateAgent: (agent: Agent) => Promise<Agent>;
   deleteAgent: (name: string, namespace?: string) => Promise<void>;
+  // Secret operations
+  createSecret: (secret: K8sSecret) => Promise<K8sSecret>;
+  deleteSecret: (name: string, namespace?: string) => Promise<void>;
 }
 
 const KubernetesConnectionContext = createContext<KubernetesConnectionContextType | null>(null);
@@ -83,8 +86,8 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     store.setIsRefreshing(true);
 
     try {
-      // Fetch all resources in parallel (including namespaces)
-      const [modelAPIs, mcpServers, agents, pods, deployments, pvcs, services, namespacesList] = await Promise.all([
+      // Fetch all resources in parallel (including namespaces and secrets)
+      const [modelAPIs, mcpServers, agents, pods, deployments, pvcs, services, secrets, namespacesList] = await Promise.all([
         k8sClient.listModelAPIs().catch((e) => { console.error('ModelAPIs error:', e); return []; }),
         k8sClient.listMCPServers().catch((e) => { console.error('MCPServers error:', e); return []; }),
         k8sClient.listAgents().catch((e) => { console.error('Agents error:', e); return []; }),
@@ -92,6 +95,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
         k8sClient.listDeployments().catch((e) => { console.error('Deployments error:', e); return []; }),
         k8sClient.listPVCs().catch((e) => { console.error('PVCs error:', e); return []; }),
         k8sClient.listServices().catch((e) => { console.error('Services error:', e); return []; }),
+        k8sClient.listSecrets().catch((e) => { console.error('Secrets error:', e); return []; }),
         k8sClient.listNamespaces().catch((e) => { console.error('Namespaces error:', e); return []; }),
       ]);
 
@@ -103,6 +107,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
         deployments: deployments.length,
         pvcs: pvcs.length,
         services: services.length,
+        secrets: secrets.length,
       });
 
       // Sync to store
@@ -113,6 +118,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       store.setDeployments(deployments);
       store.setPVCs(pvcs);
       store.setServices(services);
+      store.setSecrets(secrets as K8sSecret[]);
 
       // Update namespaces
       const namespaceNames = namespacesList.map((ns: { metadata: { name: string } }) => ns.metadata.name);
@@ -124,7 +130,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
         namespaces: namespaceNames.length > 0 ? namespaceNames : s.namespaces,
       }));
 
-      addLogEntry('info', `Synced: ${modelAPIs.length} ModelAPIs, ${mcpServers.length} MCPServers, ${agents.length} Agents`, 'connection');
+      addLogEntry('info', `Synced: ${modelAPIs.length} ModelAPIs, ${mcpServers.length} MCPServers, ${agents.length} Agents, ${secrets.length} Secrets`, 'connection');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to fetch resources';
       console.error('[KubernetesConnectionContext] refreshAll error:', error);
@@ -288,6 +294,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     store.setDeployments([]);
     store.setPVCs([]);
     store.setServices([]);
+    store.setSecrets([]);
     
     addLogEntry('info', 'Disconnected from cluster', 'connection');
   }, [stopPolling, store, addLogEntry]);
@@ -371,6 +378,24 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     addLogEntry('info', `Deleted Agent ${name}`, 'api', name, 'Agent');
   }, [store, addLogEntry]);
 
+  // Secret operations
+  const createSecret = useCallback(async (secret: K8sSecret): Promise<K8sSecret> => {
+    const created = await k8sClient.createSecret(secret);
+    const secretWithKeys: K8sSecret = {
+      ...created,
+      dataKeys: secret.data ? Object.keys(secret.data) : [],
+    };
+    store.addSecret(secretWithKeys);
+    addLogEntry('info', `Created Secret ${created.metadata.name}`, 'api', created.metadata.name, 'Secret');
+    return secretWithKeys;
+  }, [store, addLogEntry]);
+
+  const deleteSecret = useCallback(async (name: string, namespace?: string): Promise<void> => {
+    await k8sClient.deleteSecret(name, namespace);
+    store.deleteSecret(name);
+    addLogEntry('info', `Deleted Secret ${name}`, 'api', name, 'Secret');
+  }, [store, addLogEntry]);
+
   const value: KubernetesConnectionContextType = {
     ...state,
     connect,
@@ -389,6 +414,8 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     createAgent,
     updateAgent,
     deleteAgent,
+    createSecret,
+    deleteSecret,
   };
 
   return (
@@ -423,6 +450,8 @@ const defaultContextValue: KubernetesConnectionContextType = {
   createAgent: async (agent) => agent,
   updateAgent: async (agent) => agent,
   deleteAgent: async () => {},
+  createSecret: async (secret) => secret,
+  deleteSecret: async () => {},
 };
 
 export function useKubernetesConnection() {

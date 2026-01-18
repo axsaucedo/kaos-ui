@@ -337,6 +337,17 @@ export interface SecretRef {
   type: string;
 }
 
+export interface K8sSecret {
+  apiVersion: string;
+  kind: 'Secret';
+  metadata: ResourceMetadata;
+  type: string;
+  data?: Record<string, string>;
+  stringData?: Record<string, string>;
+  // UI-only field for displaying keys without values
+  dataKeys?: string[];
+}
+
 // Union types for resources
 export type AgenticResource = ModelAPI | MCPServer | Agent;
 export type KubernetesResource = Pod | Deployment | PersistentVolumeClaim | Service;
