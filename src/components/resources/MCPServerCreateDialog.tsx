@@ -1,5 +1,5 @@
-import React from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Server } from 'lucide-react';
 import {
   Dialog,
@@ -25,7 +25,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
-import { EnvVarEditor, validateKubernetesName } from './shared/EnvVarEditor';
+import { 
+  EnvVarEditorWithSecrets, 
+  EnvVarEntry, 
+  envVarEntriesToK8sEnvVars 
+} from './shared/EnvVarEditorWithSecrets';
+import { validateKubernetesName } from './shared/EnvVarEditor';
 import type { MCPServer, MCPServerType } from '@/types/kubernetes';
 
 interface MCPServerFormData {
@@ -34,7 +39,6 @@ interface MCPServerFormData {
   toolsSource: 'package' | 'string';
   fromPackage: string;
   fromString: string;
-  env: { name: string; value: string }[];
 }
 
 interface MCPServerCreateDialogProps {
@@ -46,11 +50,11 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
   const { toast } = useToast();
   const { mcpServers } = useKubernetesStore();
   const { namespace, createMCPServer } = useKubernetesConnection();
+  const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
   const {
     register,
     handleSubmit,
-    control,
     watch,
     setValue,
     reset,
@@ -62,13 +66,7 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
       toolsSource: 'package',
       fromPackage: '',
       fromString: '',
-      env: [],
     },
-  });
-
-  const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
-    control,
-    name: 'env',
   });
 
   const watchedType = watch('type');
@@ -83,7 +81,7 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
 
   const onSubmit = async (data: MCPServerFormData) => {
     try {
-      const envVars = data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }));
+      const k8sEnvVars = envVarEntriesToK8sEnvVars(envVars);
       
       const newMCPServer: MCPServer = {
         apiVersion: 'kaos.tools/v1alpha1',
@@ -98,7 +96,7 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
             tools: data.toolsSource === 'package' 
               ? { fromPackage: data.fromPackage }
               : { fromString: data.fromString },
-            env: envVars.length > 0 ? envVars : undefined,
+            env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined,
           },
         },
       };
@@ -111,6 +109,7 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
       });
       
       reset();
+      setEnvVars([]);
       onClose();
     } catch (error) {
       toast({
@@ -123,6 +122,7 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
 
   const handleClose = () => {
     reset();
+    setEnvVars([]);
     onClose();
   };
 
@@ -239,13 +239,10 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
                 </Tabs>
               </div>
 
-              {/* Environment Variables */}
-              <EnvVarEditor
-                fields={envFields}
-                register={register}
-                append={appendEnv}
-                remove={removeEnv}
-                fieldPrefix="env"
+              {/* Environment Variables with Secrets */}
+              <EnvVarEditorWithSecrets
+                fields={envVars}
+                onChange={setEnvVars}
               />
             </div>
           </ScrollArea>

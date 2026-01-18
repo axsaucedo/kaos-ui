@@ -1,5 +1,5 @@
-import React from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Box } from 'lucide-react';
 import {
   Dialog,
@@ -24,7 +24,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
-import { EnvVarEditor, validateKubernetesName } from './shared/EnvVarEditor';
+import { 
+  EnvVarEditorWithSecrets, 
+  EnvVarEntry, 
+  envVarEntriesToK8sEnvVars 
+} from './shared/EnvVarEditorWithSecrets';
+import { validateKubernetesName } from './shared/EnvVarEditor';
 import type { ModelAPI, ModelAPIMode } from '@/types/kubernetes';
 
 interface ModelAPIFormData {
@@ -36,7 +41,6 @@ interface ModelAPIFormData {
   configYamlString: string;
   // Hosted mode fields
   hostedModel: string;
-  env: { name: string; value: string }[];
 }
 
 interface ModelAPICreateDialogProps {
@@ -48,11 +52,11 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
   const { toast } = useToast();
   const { modelAPIs } = useKubernetesStore();
   const { namespace, createModelAPI } = useKubernetesConnection();
+  const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
   const {
     register,
     handleSubmit,
-    control,
     watch,
     setValue,
     reset,
@@ -65,13 +69,7 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
       proxyModel: '',
       configYamlString: '',
       hostedModel: '',
-      env: [],
     },
-  });
-
-  const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
-    control,
-    name: 'env',
   });
 
   const watchedMode = watch('mode');
@@ -85,7 +83,7 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
 
   const onSubmit = async (data: ModelAPIFormData) => {
     try {
-      const envVars = data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }));
+      const k8sEnvVars = envVarEntriesToK8sEnvVars(envVars);
       
       const newModelAPI: ModelAPI = {
         apiVersion: 'kaos.tools/v1alpha1',
@@ -101,13 +99,13 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
                 apiBase: data.apiBase || undefined,
                 model: data.proxyModel || undefined,
                 configYaml: data.configYamlString ? { fromString: data.configYamlString } : undefined,
-                env: envVars.length > 0 ? envVars : undefined 
+                env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined 
               }
             : undefined,
           hostedConfig: data.mode === 'Hosted'
             ? { 
                 model: data.hostedModel, 
-                env: envVars.length > 0 ? envVars : undefined 
+                env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined 
               }
             : undefined,
         },
@@ -121,6 +119,7 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
       });
       
       reset();
+      setEnvVars([]);
       onClose();
     } catch (error) {
       toast({
@@ -133,6 +132,7 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
 
   const handleClose = () => {
     reset();
+    setEnvVars([]);
     onClose();
   };
 
@@ -269,13 +269,10 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
                 </div>
               )}
 
-              {/* Environment Variables */}
-              <EnvVarEditor
-                fields={envFields}
-                register={register}
-                append={appendEnv}
-                remove={removeEnv}
-                fieldPrefix="env"
+              {/* Environment Variables with Secrets */}
+              <EnvVarEditorWithSecrets
+                fields={envVars}
+                onChange={setEnvVars}
               />
             </div>
           </ScrollArea>

@@ -1,5 +1,5 @@
-import React from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { Bot } from 'lucide-react';
 import {
   Dialog,
@@ -25,7 +25,12 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
-import { EnvVarEditor, validateKubernetesName } from './shared/EnvVarEditor';
+import { 
+  EnvVarEditorWithSecrets, 
+  EnvVarEntry, 
+  envVarEntriesToK8sEnvVars 
+} from './shared/EnvVarEditorWithSecrets';
+import { validateKubernetesName } from './shared/EnvVarEditor';
 import type { Agent } from '@/types/kubernetes';
 
 interface AgentFormData {
@@ -36,7 +41,6 @@ interface AgentFormData {
   mcpServers: string[];
   networkExpose: boolean;
   networkAccess: string[];
-  env: { name: string; value: string }[];
 }
 
 interface AgentCreateDialogProps {
@@ -48,11 +52,11 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
   const { toast } = useToast();
   const { modelAPIs, mcpServers, agents } = useKubernetesStore();
   const { namespace, createAgent } = useKubernetesConnection();
+  const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
   const {
     register,
     handleSubmit,
-    control,
     watch,
     setValue,
     reset,
@@ -66,13 +70,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
       mcpServers: [],
       networkExpose: false,
       networkAccess: [],
-      env: [],
     },
-  });
-
-  const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
-    control,
-    name: 'env',
   });
 
   const watchedModelAPI = watch('modelAPI');
@@ -107,10 +105,10 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
 
   const onSubmit = async (data: AgentFormData) => {
     try {
-      const envVars = data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }));
+      const k8sEnvVars = envVarEntriesToK8sEnvVars(envVars);
       
       const newAgent: Agent = {
-        apiVersion: 'ethical.institute/v1alpha1',
+        apiVersion: 'kaos.tools/v1alpha1',
         kind: 'Agent',
         metadata: {
           name: data.name,
@@ -126,7 +124,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
           config: {
             description: data.description,
             instructions: data.instructions,
-            env: envVars.length > 0 ? envVars : undefined,
+            env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined,
           },
         },
       };
@@ -139,6 +137,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
       });
       
       reset();
+      setEnvVars([]);
       onClose();
     } catch (error) {
       toast({
@@ -151,6 +150,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
 
   const handleClose = () => {
     reset();
+    setEnvVars([]);
     onClose();
   };
 
@@ -298,13 +298,10 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
                 )}
               </div>
 
-              {/* Environment Variables */}
-              <EnvVarEditor
-                fields={envFields}
-                register={register}
-                append={appendEnv}
-                remove={removeEnv}
-                fieldPrefix="env"
+              {/* Environment Variables with Secrets */}
+              <EnvVarEditorWithSecrets
+                fields={envVars}
+                onChange={setEnvVars}
               />
             </div>
           </ScrollArea>

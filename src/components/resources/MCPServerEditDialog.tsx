@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Server } from 'lucide-react';
 import {
@@ -25,7 +25,12 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
-import { EnvVarEditor } from './shared/EnvVarEditor';
+import { 
+  EnvVarEditorWithSecrets, 
+  EnvVarEntry, 
+  envVarEntriesToK8sEnvVars,
+  k8sEnvVarsToEntries,
+} from './shared/EnvVarEditorWithSecrets';
 import { LabelsAnnotationsEditor } from '@/components/shared/LabelsAnnotationsEditor';
 import type { MCPServer, MCPServerType } from '@/types/kubernetes';
 
@@ -34,7 +39,6 @@ interface MCPServerFormData {
   toolsSource: 'package' | 'string';
   fromPackage: string;
   fromString: string;
-  env: { name: string; value: string }[];
   gatewayTimeout: string;
   gatewayRetries: number | undefined;
   labels: { key: string; value: string }[];
@@ -56,6 +60,7 @@ const arrayToRecord = (arr: { key: string; value: string }[]) =>
 export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditDialogProps) {
   const { toast } = useToast();
   const { updateMCPServer } = useKubernetesConnection();
+  const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
   const getToolsSource = (): 'package' | 'string' => {
     if (mcpServer.spec.config.tools?.fromString) return 'string';
@@ -76,17 +81,11 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
       toolsSource: getToolsSource(),
       fromPackage: mcpServer.spec.config.tools?.fromPackage || '',
       fromString: mcpServer.spec.config.tools?.fromString || '',
-      env: mcpServer.spec.config.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
       gatewayTimeout: mcpServer.spec.gatewayRoute?.timeout || '',
       gatewayRetries: mcpServer.spec.gatewayRoute?.retries,
       labels: recordToArray(mcpServer.metadata.labels),
       annotations: recordToArray(mcpServer.metadata.annotations),
     },
-  });
-
-  const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
-    control,
-    name: 'env',
   });
 
   const watchedType = watch('type');
@@ -98,17 +97,17 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
       toolsSource: getToolsSource(),
       fromPackage: mcpServer.spec.config.tools?.fromPackage || '',
       fromString: mcpServer.spec.config.tools?.fromString || '',
-      env: mcpServer.spec.config.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
       gatewayTimeout: mcpServer.spec.gatewayRoute?.timeout || '',
       gatewayRetries: mcpServer.spec.gatewayRoute?.retries,
       labels: recordToArray(mcpServer.metadata.labels),
       annotations: recordToArray(mcpServer.metadata.annotations),
     });
+    setEnvVars(k8sEnvVarsToEntries(mcpServer.spec.config.env));
   }, [mcpServer, reset]);
 
   const onSubmit = async (data: MCPServerFormData) => {
     try {
-      const envVars = data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }));
+      const k8sEnvVars = envVarEntriesToK8sEnvVars(envVars);
       const labels = arrayToRecord(data.labels);
       const annotations = arrayToRecord(data.annotations);
       
@@ -125,7 +124,7 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
             tools: data.toolsSource === 'package'
               ? { fromPackage: data.fromPackage }
               : { fromString: data.fromString },
-            env: envVars.length > 0 ? envVars : undefined,
+            env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined,
           },
           gatewayRoute: (data.gatewayTimeout || data.gatewayRetries)
             ? {
@@ -277,13 +276,10 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
 
               <Separator />
 
-              {/* Environment Variables */}
-              <EnvVarEditor
-                fields={envFields}
-                register={register}
-                append={appendEnv}
-                remove={removeEnv}
-                fieldPrefix="env"
+              {/* Environment Variables with Secrets */}
+              <EnvVarEditorWithSecrets
+                fields={envVars}
+                onChange={setEnvVars}
               />
 
               <Separator />

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Bot, Plus, Trash2 } from 'lucide-react';
 import {
@@ -27,6 +27,12 @@ import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
 import { LabelsAnnotationsEditor } from '@/components/shared/LabelsAnnotationsEditor';
+import { 
+  EnvVarEditorWithSecrets, 
+  EnvVarEntry, 
+  envVarEntriesToK8sEnvVars,
+  k8sEnvVarsToEntries,
+} from './shared/EnvVarEditorWithSecrets';
 import type { Agent } from '@/types/kubernetes';
 
 interface AgentFormData {
@@ -40,7 +46,6 @@ interface AgentFormData {
   waitForDependencies: boolean;
   gatewayTimeout: string;
   gatewayRetries: number | undefined;
-  env: { name: string; value: string }[];
   labels: { key: string; value: string }[];
   annotations: { key: string; value: string }[];
 }
@@ -61,6 +66,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
   const { toast } = useToast();
   const { modelAPIs, mcpServers, agents } = useKubernetesStore();
   const { updateAgent } = useKubernetesConnection();
+  const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
   const {
     register,
@@ -82,15 +88,9 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
       waitForDependencies: agent.spec.waitForDependencies || false,
       gatewayTimeout: agent.spec.gatewayRoute?.timeout || '',
       gatewayRetries: agent.spec.gatewayRoute?.retries,
-      env: agent.spec.config?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
       labels: recordToArray(agent.metadata.labels),
       annotations: recordToArray(agent.metadata.annotations),
     },
-  });
-
-  const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
-    control,
-    name: 'env',
   });
 
   const watchedModelAPI = watch('modelAPI');
@@ -111,16 +111,17 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
       waitForDependencies: agent.spec.waitForDependencies || false,
       gatewayTimeout: agent.spec.gatewayRoute?.timeout || '',
       gatewayRetries: agent.spec.gatewayRoute?.retries,
-      env: agent.spec.config?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [],
       labels: recordToArray(agent.metadata.labels),
       annotations: recordToArray(agent.metadata.annotations),
     });
+    setEnvVars(k8sEnvVarsToEntries(agent.spec.config?.env));
   }, [agent, reset]);
 
   const onSubmit = async (data: AgentFormData) => {
     try {
       const labels = arrayToRecord(data.labels);
       const annotations = arrayToRecord(data.annotations);
+      const k8sEnvVars = envVarEntriesToK8sEnvVars(envVars);
       
       const updatedAgent: Agent = {
         ...agent,
@@ -147,9 +148,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
             description: data.description || undefined,
             instructions: data.instructions || undefined,
             reasoningLoopMaxSteps: data.reasoningLoopMaxSteps || undefined,
-            env: data.env.length > 0 
-              ? data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }))
-              : undefined,
+            env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined,
           },
         },
       };
@@ -382,47 +381,11 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
 
               <Separator />
 
-              {/* Environment Variables */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Environment Variables</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => appendEnv({ name: '', value: '' })}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add
-                  </Button>
-                </div>
-                {envFields.length > 0 && (
-                  <div className="space-y-2">
-                    {envFields.map((field, index) => (
-                      <div key={field.id} className="flex gap-2">
-                        <Input
-                          {...register(`env.${index}.name` as const)}
-                          placeholder="NAME"
-                          className="font-mono text-sm"
-                        />
-                        <Input
-                          {...register(`env.${index}.value` as const)}
-                          placeholder="value"
-                          className="font-mono text-sm"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => removeEnv(index)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {/* Environment Variables with Secrets */}
+              <EnvVarEditorWithSecrets
+                fields={envVars}
+                onChange={setEnvVars}
+              />
 
               <Separator />
 

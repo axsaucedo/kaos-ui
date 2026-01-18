@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Box } from 'lucide-react';
 import {
@@ -24,8 +24,12 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
-import { EnvVarEditor } from './shared/EnvVarEditor';
-import { GatewayRouteEditor } from '@/components/shared/GatewayRouteEditor';
+import { 
+  EnvVarEditorWithSecrets, 
+  EnvVarEntry, 
+  envVarEntriesToK8sEnvVars,
+  k8sEnvVarsToEntries,
+} from './shared/EnvVarEditorWithSecrets';
 import { LabelsAnnotationsEditor } from '@/components/shared/LabelsAnnotationsEditor';
 import type { ModelAPI, ModelAPIMode } from '@/types/kubernetes';
 
@@ -35,7 +39,6 @@ interface ModelAPIFormData {
   proxyModel: string;
   configYamlString: string;
   hostedModel: string;
-  env: { name: string; value: string }[];
   gatewayTimeout: string;
   gatewayRetries: number | undefined;
   labels: { key: string; value: string }[];
@@ -57,12 +60,13 @@ const arrayToRecord = (arr: { key: string; value: string }[]) =>
 export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDialogProps) {
   const { toast } = useToast();
   const { updateModelAPI } = useKubernetesConnection();
+  const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
   const getEnvVars = () => {
     if (modelAPI.spec.mode === 'Proxy') {
-      return modelAPI.spec.proxyConfig?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [];
+      return modelAPI.spec.proxyConfig?.env || [];
     }
-    return modelAPI.spec.hostedConfig?.env?.map((e) => ({ name: e.name, value: e.value || '' })) || [];
+    return modelAPI.spec.hostedConfig?.env || [];
   };
 
   const {
@@ -80,17 +84,11 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
       proxyModel: modelAPI.spec.proxyConfig?.model || '',
       configYamlString: modelAPI.spec.proxyConfig?.configYaml?.fromString || '',
       hostedModel: modelAPI.spec.hostedConfig?.model || '',
-      env: getEnvVars(),
       gatewayTimeout: modelAPI.spec.gatewayRoute?.timeout || '',
       gatewayRetries: modelAPI.spec.gatewayRoute?.retries,
       labels: recordToArray(modelAPI.metadata.labels),
       annotations: recordToArray(modelAPI.metadata.annotations),
     },
-  });
-
-  const { fields: envFields, append: appendEnv, remove: removeEnv } = useFieldArray({
-    control,
-    name: 'env',
   });
 
   const watchedMode = watch('mode');
@@ -102,17 +100,17 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
       proxyModel: modelAPI.spec.proxyConfig?.model || '',
       configYamlString: modelAPI.spec.proxyConfig?.configYaml?.fromString || '',
       hostedModel: modelAPI.spec.hostedConfig?.model || '',
-      env: getEnvVars(),
       gatewayTimeout: modelAPI.spec.gatewayRoute?.timeout || '',
       gatewayRetries: modelAPI.spec.gatewayRoute?.retries,
       labels: recordToArray(modelAPI.metadata.labels),
       annotations: recordToArray(modelAPI.metadata.annotations),
     });
+    setEnvVars(k8sEnvVarsToEntries(getEnvVars()));
   }, [modelAPI, reset]);
 
   const onSubmit = async (data: ModelAPIFormData) => {
     try {
-      const envVars = data.env.filter((e) => e.name).map((e) => ({ name: e.name, value: e.value }));
+      const k8sEnvVars = envVarEntriesToK8sEnvVars(envVars);
       const labels = arrayToRecord(data.labels);
       const annotations = arrayToRecord(data.annotations);
       
@@ -130,13 +128,13 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                 apiBase: data.apiBase || undefined,
                 model: data.proxyModel || undefined,
                 configYaml: data.configYamlString ? { fromString: data.configYamlString } : undefined,
-                env: envVars.length > 0 ? envVars : undefined 
+                env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined 
               }
             : undefined,
           hostedConfig: data.mode === 'Hosted'
             ? { 
                 model: data.hostedModel, 
-                env: envVars.length > 0 ? envVars : undefined 
+                env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined 
               }
             : undefined,
           gatewayRoute: (data.gatewayTimeout || data.gatewayRetries)
@@ -307,13 +305,10 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
 
               <Separator />
 
-              {/* Environment Variables */}
-              <EnvVarEditor
-                fields={envFields}
-                register={register}
-                append={appendEnv}
-                remove={removeEnv}
-                fieldPrefix="env"
+              {/* Environment Variables with Secrets */}
+              <EnvVarEditorWithSecrets
+                fields={envVars}
+                onChange={setEnvVars}
               />
 
               <Separator />
