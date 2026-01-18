@@ -357,6 +357,10 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     addLogEntry('info', 'Disconnected from cluster', 'connection');
   }, [stopPolling, store, addLogEntry]);
 
+  // Default cluster URL and namespace for demo/documentation
+  const DEFAULT_CLUSTER_URL = 'https://shiny-hats-wear.loca.lt';
+  const DEFAULT_NAMESPACE = 'kaos-hierarchy';
+
   // Auto-connect on mount if saved config exists or URL param is provided
   useEffect(() => {
     // Check for query parameters first
@@ -365,7 +369,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
     const urlNamespace = urlParams.get('namespace');
     
     if (urlKubernetesUrl) {
-      const targetNamespace = urlNamespace || 'default';
+      const targetNamespace = urlNamespace || DEFAULT_NAMESPACE;
       console.log('[KubernetesConnectionContext] Found kubernetesUrl in URL params:', urlKubernetesUrl, 'namespace:', targetNamespace);
       // Save to localStorage for future sessions
       localStorage.setItem('k8s-config', JSON.stringify({ baseUrl: urlKubernetesUrl, namespace: targetNamespace }));
@@ -379,7 +383,7 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       try {
         const config = JSON.parse(savedConfig);
         // If namespace is provided in URL, override the saved config
-        const targetNamespace = urlNamespace || config.namespace || 'default';
+        const targetNamespace = urlNamespace || config.namespace || DEFAULT_NAMESPACE;
         console.log('[KubernetesConnectionContext] Found saved config:', config, 'using namespace:', targetNamespace);
         if (config.baseUrl) {
           connect(config.baseUrl, targetNamespace);
@@ -390,10 +394,10 @@ export function KubernetesConnectionProvider({ children }: { children: React.Rea
       }
     }
     
-    // Default: try to connect to localhost:8010
-    const targetNamespace = urlNamespace || 'default';
-    console.log('[KubernetesConnectionContext] No saved config, attempting default localhost:8010 with namespace:', targetNamespace);
-    connect('http://localhost:8010', targetNamespace);
+    // Default: connect to the demo cluster
+    const targetNamespace = urlNamespace || DEFAULT_NAMESPACE;
+    console.log('[KubernetesConnectionContext] No saved config, connecting to default cluster:', DEFAULT_CLUSTER_URL, 'namespace:', targetNamespace);
+    connect(DEFAULT_CLUSTER_URL, targetNamespace);
     
     return () => stopPolling();
   }, []);  // eslint-disable-line react-hooks/exhaustive-deps
