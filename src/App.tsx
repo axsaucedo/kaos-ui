@@ -14,10 +14,33 @@ import MCPServerDetail from "./pages/MCPServerDetail";
 import ModelAPIDetail from "./pages/ModelAPIDetail";
 import PodDetail from "./pages/PodDetail";
 
+// DEMO MODE: Import demo data and inject into store
+import { useEffect } from "react";
+import { useKubernetesStore } from "./stores/kubernetesStore";
+import { demoModelAPIs, demoMCPServers, demoAgents, demoPods, demoDeployments, demoServices, demoSecrets } from "./data/demoData";
+
 const queryClient = new QueryClient();
 
 // Get basename for GitHub Pages deployment
 const basename = import.meta.env.BASE_URL;
+
+// TEMPORARY: Demo mode initializer - loads mock data immediately
+function DemoModeInitializer({ children }: { children: React.ReactNode }) {
+  const store = useKubernetesStore();
+  
+  useEffect(() => {
+    // Load demo data immediately for screenshot capture
+    store.setModelAPIs(demoModelAPIs, true);
+    store.setMCPServers(demoMCPServers, true);
+    store.setAgents(demoAgents, true);
+    store.setPods(demoPods);
+    store.setDeployments(demoDeployments);
+    store.setServices(demoServices);
+    store.setSecrets(demoSecrets);
+  }, []);
+  
+  return <>{children}</>;
+}
 
 const App = () => (
   <ErrorBoundary>
@@ -27,20 +50,22 @@ const App = () => (
           <Toaster />
           <Sonner />
           <KubernetesConnectionProvider>
-            <BrowserRouter basename={basename}>
-              <Routes>
-                {/* Main layout with sidebar and header */}
-                <Route element={<MainLayout />}>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/agents/:namespace/:name" element={<AgentDetail />} />
-                  <Route path="/mcpservers/:namespace/:name" element={<MCPServerDetail />} />
-                  <Route path="/modelapis/:namespace/:name" element={<ModelAPIDetail />} />
-                  <Route path="/pods/:namespace/:name" element={<PodDetail />} />
-                </Route>
-                {/* 404 page without layout */}
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </BrowserRouter>
+            <DemoModeInitializer>
+              <BrowserRouter basename={basename}>
+                <Routes>
+                  {/* Main layout with sidebar and header */}
+                  <Route element={<MainLayout />}>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/agents/:namespace/:name" element={<AgentDetail />} />
+                    <Route path="/mcpservers/:namespace/:name" element={<MCPServerDetail />} />
+                    <Route path="/modelapis/:namespace/:name" element={<ModelAPIDetail />} />
+                    <Route path="/pods/:namespace/:name" element={<PodDetail />} />
+                  </Route>
+                  {/* 404 page without layout */}
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </BrowserRouter>
+            </DemoModeInitializer>
           </KubernetesConnectionProvider>
         </TooltipProvider>
       </ThemeProvider>
