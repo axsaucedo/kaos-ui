@@ -39,6 +39,7 @@ interface AgentFormData {
   description: string;
   instructions: string;
   modelAPI: string;
+  model: string;
   mcpServers: string[];
   networkExpose: boolean;
   networkAccess: string[];
@@ -73,6 +74,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
       description: '',
       instructions: '',
       modelAPI: '',
+      model: '',
       mcpServers: [],
       networkExpose: false,
       networkAccess: [],
@@ -139,6 +141,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
         },
         spec: {
           modelAPI: data.modelAPI,
+          model: data.model,
           mcpServers: data.mcpServers.length > 0 ? data.mcpServers : undefined,
           agentNetwork: {
             expose: data.networkExpose,
@@ -269,6 +272,23 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
                     No Model APIs available. Create one first.
                   </p>
                 )}
+              </div>
+
+              {/* Model */}
+              <div className="space-y-2">
+                <Label htmlFor="model">Model <span className="text-destructive">*</span></Label>
+                <Input
+                  id="model"
+                  {...register('model', { required: 'Model is required' })}
+                  placeholder="e.g., openai/gpt-4o, ollama/smollm2:135m"
+                  className="font-mono"
+                />
+                {errors.model && (
+                  <p className="text-sm text-destructive">{errors.model.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Must be supported by the selected ModelAPI
+                </p>
               </div>
 
               {/* MCP Servers */}

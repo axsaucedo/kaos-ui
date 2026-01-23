@@ -43,13 +43,41 @@ export interface ConfigYamlSource {
   };
 }
 
+// ApiKeyValueFrom defines sources for API key values
+export interface ApiKeyValueFrom {
+  // SecretKeyRef is a reference to a secret key
+  secretKeyRef?: {
+    name: string;
+    key: string;
+  };
+  // ConfigMapKeyRef is a reference to a configmap key
+  configMapKeyRef?: {
+    name: string;
+    key: string;
+  };
+}
+
+// ApiKeySource defines the source of an API key
+export interface ApiKeySource {
+  // Value is a direct string value (not recommended for production)
+  value?: string;
+  // ValueFrom is a reference to a secret or configmap
+  valueFrom?: ApiKeyValueFrom;
+}
+
 // ProxyConfig defines configuration for LiteLLM proxy mode
 export interface ProxyConfig {
+  // Models is the list of model identifiers supported by this proxy (required)
+  // Examples: ["openai/gpt-5-mini", "gemini/*", "*"]
+  models: string[];
   // APIBase is the base URL of the backend LLM API to proxy to (e.g., http://host.docker.internal:11434)
+  // Set as PROXY_API_BASE environment variable
   apiBase?: string;
-  // Model is the model identifier to proxy (e.g., ollama/smollm2:135m)
-  model?: string;
+  // APIKey for authentication with the backend LLM API
+  // Set as PROXY_API_KEY environment variable
+  apiKey?: ApiKeySource;
   // ConfigYaml allows providing a custom LiteLLM config (for advanced multi-model routing)
+  // When provided, used directly for LiteLLM config; models list is still used for Agent validation
   configYaml?: ConfigYamlSource;
   // Env variables to pass to the proxy container
   env?: EnvVar[];
@@ -105,6 +133,8 @@ export interface ModelAPIStatus {
   endpoint?: string;
   // Message provides additional status information
   message?: string;
+  // SupportedModels lists models this ModelAPI supports
+  supportedModels?: string[];
   // Deployment status for rolling update visibility
   deployment?: DeploymentStatusInfo;
 }
@@ -216,6 +246,9 @@ export interface AgentConfig {
 export interface AgentSpec {
   // ModelAPI is the name of the ModelAPI resource this agent uses
   modelAPI: string;
+  // Model is the model identifier this agent uses (e.g., "openai/gpt-4", "ollama/smollm2:135m")
+  // Must be supported by the referenced ModelAPI
+  model: string;
   // MCPServers is a list of MCPServer names this agent can use
   mcpServers?: string[];
   // AgentNetwork defines A2A communication settings
@@ -237,6 +270,8 @@ export interface AgentStatus {
   ready?: boolean;
   // Endpoint is the Agent Card HTTP endpoint for A2A communication
   endpoint?: string;
+  // Model being used by this agent
+  model?: string;
   // LinkedResources tracks references to ModelAPI and MCPServer resources
   linkedResources?: Record<string, string>;
   // Message provides additional status information

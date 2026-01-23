@@ -90,6 +90,7 @@ export function CRUDTestPanel() {
         spec: {
           mode: 'Proxy',
           proxyConfig: {
+            models: ['*'],
             env: [
               { name: 'TEST_KEY', value: 'test-value' }
             ]
@@ -124,6 +125,7 @@ export function CRUDTestPanel() {
         spec: {
           ...latestResource.spec,
           proxyConfig: {
+            models: ['*'],
             env: [
               { name: 'TEST_KEY', value: 'updated-value' },
               { name: 'NEW_KEY', value: 'new-value' }
@@ -260,6 +262,7 @@ export function CRUDTestPanel() {
         },
         spec: {
           modelAPI: 'multi-agent-api',
+          model: 'ollama/smollm2:135m',
           config: {
             description: 'Test agent for CRUD testing',
             instructions: 'You are a test agent.',

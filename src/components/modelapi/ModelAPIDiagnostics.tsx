@@ -42,7 +42,7 @@ export function ModelAPIDiagnostics({ modelAPI }: ModelAPIDiagnosticsProps) {
 
   // Derive default model from spec
   const defaultModel = modelAPI.spec.mode === 'Proxy' 
-    ? modelAPI.spec.proxyConfig?.model || 'gpt-3.5-turbo'
+    ? (modelAPI.spec.proxyConfig?.models?.[0] || 'gpt-3.5-turbo')
     : modelAPI.spec.hostedConfig?.model || 'llama2';
 
   const sendRequest = useCallback(async () => {

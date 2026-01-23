@@ -90,15 +90,15 @@ export function ModelAPIDetailDrawer({ modelAPI, open, onClose, onEdit }: ModelA
                         </span>
                       </div>
                     )}
-                    {modelAPI.spec.proxyConfig?.model && (
+                    {modelAPI.spec.proxyConfig?.models && modelAPI.spec.proxyConfig.models.length > 0 && (
                       <div>
-                        <span className="text-sm text-muted-foreground">Model: </span>
+                        <span className="text-sm text-muted-foreground">Models: </span>
                         <span className="text-sm font-mono text-foreground">
-                          {modelAPI.spec.proxyConfig.model}
+                          {modelAPI.spec.proxyConfig.models.join(', ')}
                         </span>
                       </div>
                     )}
-                    {!modelAPI.spec.proxyConfig?.apiBase && !modelAPI.spec.proxyConfig?.model && (
+                    {!modelAPI.spec.proxyConfig?.apiBase && (!modelAPI.spec.proxyConfig?.models || modelAPI.spec.proxyConfig.models.length === 0) && (
                       <p className="text-sm text-muted-foreground">
                         Proxies requests to external LLM providers via LiteLLM
                       </p>
