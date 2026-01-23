@@ -63,10 +63,10 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
               </p>
             </div>
             <div className="col-span-2">
-              <span className="text-muted-foreground">Model</span>
+              <span className="text-muted-foreground">Models</span>
               <p className="font-mono font-medium">
                 {modelAPI.spec.mode === 'Proxy' 
-                  ? modelAPI.spec.proxyConfig?.model || 'Not specified'
+                  ? (modelAPI.spec.proxyConfig?.models?.join(', ') || 'Not specified')
                   : modelAPI.spec.hostedConfig?.model || 'Not specified'}
               </p>
             </div>
@@ -198,11 +198,29 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
                   </code>
                 </div>
               )}
-              {modelAPI.spec.proxyConfig.model && (
+              {modelAPI.spec.proxyConfig?.models && modelAPI.spec.proxyConfig.models.length > 0 && (
                 <div>
-                  <span className="text-sm text-muted-foreground">Model</span>
+                  <span className="text-sm text-muted-foreground">Models</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {modelAPI.spec.proxyConfig.models.map((model, idx) => (
+                      <code key={idx} className="font-mono text-sm bg-muted px-2 py-1 rounded">
+                        {model}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {modelAPI.spec.proxyConfig?.apiKey && (
+                <div>
+                  <span className="text-sm text-muted-foreground">API Key</span>
                   <code className="font-mono text-sm block bg-muted px-2 py-1 rounded mt-1">
-                    {modelAPI.spec.proxyConfig.model}
+                    {modelAPI.spec.proxyConfig.apiKey.value 
+                      ? '••••••••' 
+                      : modelAPI.spec.proxyConfig.apiKey.valueFrom?.secretKeyRef 
+                        ? `From Secret: ${modelAPI.spec.proxyConfig.apiKey.valueFrom.secretKeyRef.name}/${modelAPI.spec.proxyConfig.apiKey.valueFrom.secretKeyRef.key}`
+                        : modelAPI.spec.proxyConfig.apiKey.valueFrom?.configMapKeyRef
+                          ? `From ConfigMap: ${modelAPI.spec.proxyConfig.apiKey.valueFrom.configMapKeyRef.name}/${modelAPI.spec.proxyConfig.apiKey.valueFrom.configMapKeyRef.key}`
+                          : 'Not configured'}
                   </code>
                 </div>
               )}
@@ -222,7 +240,7 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
                   </code>
                 </div>
               )}
-              {!modelAPI.spec.proxyConfig.apiBase && !modelAPI.spec.proxyConfig.model && !modelAPI.spec.proxyConfig.configYaml && (
+              {!modelAPI.spec.proxyConfig.apiBase && (!modelAPI.spec.proxyConfig.models || modelAPI.spec.proxyConfig.models.length === 0) && !modelAPI.spec.proxyConfig.configYaml && (
                 <p className="text-sm text-muted-foreground">
                   Proxies requests to external LLM providers via LiteLLM
                 </p>

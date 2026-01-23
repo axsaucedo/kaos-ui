@@ -39,6 +39,7 @@ interface AgentFormData {
   description: string;
   instructions: string;
   modelAPI: string;
+  model: string;
   mcpServers: string[];
   networkExpose: boolean;
   networkAccess: string[];
@@ -87,6 +88,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
       description: agent.spec.config?.description || '',
       instructions: agent.spec.config?.instructions || '',
       modelAPI: agent.spec.modelAPI || '',
+      model: agent.spec.model || '',
       mcpServers: agent.spec.mcpServers || [],
       networkExpose: agent.spec.agentNetwork?.expose || false,
       networkAccess: agent.spec.agentNetwork?.access || [],
@@ -115,6 +117,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
       description: agent.spec.config?.description || '',
       instructions: agent.spec.config?.instructions || '',
       modelAPI: agent.spec.modelAPI || '',
+      model: agent.spec.model || '',
       mcpServers: agent.spec.mcpServers || [],
       networkExpose: agent.spec.agentNetwork?.expose || false,
       networkAccess: agent.spec.agentNetwork?.access || [],
@@ -156,6 +159,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
         },
         spec: {
           modelAPI: data.modelAPI,
+          model: data.model,
           mcpServers: data.mcpServers.length > 0 ? data.mcpServers : undefined,
           agentNetwork: {
             expose: data.networkExpose,
@@ -274,6 +278,23 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* Model */}
+              <div className="space-y-2">
+                <Label htmlFor="model">Model <span className="text-destructive">*</span></Label>
+                <Input
+                  id="model"
+                  {...register('model', { required: 'Model is required' })}
+                  placeholder="e.g., openai/gpt-4o, ollama/smollm2:135m"
+                  className="font-mono"
+                />
+                {errors.model && (
+                  <p className="text-sm text-destructive">{errors.model.message}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Must be supported by the selected ModelAPI
+                </p>
               </div>
 
               {/* MCP Servers */}
