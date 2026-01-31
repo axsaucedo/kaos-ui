@@ -2,7 +2,7 @@ name: Deploy Dev
 
 on:
   push:
-    branches: [main, release-process]  # TODO: Remove release-process before merge
+    branches: [main]
     paths:
       - 'src/**'
       - 'public/**'

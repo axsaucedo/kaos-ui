@@ -202,21 +202,41 @@ Comprehensive documentation is available:
 
 ## 🚢 Deployment
 
-### GitHub Pages (Default)
+### GitHub Pages Versions
 
-The repository includes a GitHub Actions workflow for automatic deployment:
+The UI is deployed to GitHub Pages with versioned paths:
 
-```yaml
-# .github/workflows/deploy.yml
-# Triggers on push to main branch
+| Path | Description |
+|------|-------------|
+| [/kaos-ui/latest/](https://axsaucedo.github.io/kaos-ui/latest/) | Latest stable release |
+| [/kaos-ui/dev/](https://axsaucedo.github.io/kaos-ui/dev/) | Development build (from main) |
+| `/kaos-ui/vX.Y.Z/` | Specific version releases |
+
+The root path `/kaos-ui/` redirects to `/kaos-ui/latest/`.
+
+### Release Process
+
+Releases are triggered by creating a git tag:
+
+```bash
+# Create and push a release tag
+git tag v1.0.0
+git push origin v1.0.0
 ```
+
+This triggers the release workflow which:
+1. Builds the app for the versioned path (`/kaos-ui/v1.0.0/`)
+2. Updates `/kaos-ui/latest/` to point to this version
+3. Creates a GitHub Release with auto-generated notes
+4. Opens a PR to bump the VERSION file
 
 ### Custom Deployment
 
 Build the static files:
 
 ```bash
-npm run build
+# Build with custom base path
+VITE_BASE=/your-path/ npm run build
 ```
 
 Deploy the `dist/` folder to any static hosting service:
