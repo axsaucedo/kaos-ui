@@ -6,7 +6,7 @@ import { Page, expect } from '@playwright/test';
 
 /** Default test configuration */
 export const TEST_CONFIG = {
-  proxyUrl: 'http://localhost:8081',
+  proxyUrl: 'http://localhost:8010',
   namespace: 'kaos-hierarchy',
   baseUrl: 'http://localhost:8080',
 };

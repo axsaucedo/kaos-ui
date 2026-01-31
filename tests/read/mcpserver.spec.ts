@@ -20,20 +20,20 @@ test.describe('MCPServer Read Operations', () => {
 
   test('should display the MCPServer list page', async ({ page }) => {
     // Navigate to MCP Servers
-    await page.getByRole('link', { name: /mcp server/i }).click();
+    await page.getByRole('button', { name: /mcp server/i }).click();
     await page.waitForLoadState('networkidle');
     
-    // Verify we're on the MCPServers page
-    await expect(page).toHaveURL(/\/mcpservers/);
-    
-    // Should show some content
+    // Verify we're on the MCPServers tab (UI uses state-based navigation)
     const pageContent = await page.locator('body').textContent();
     expect(pageContent).toBeTruthy();
+    
+    // Should show MCP Server content
+    await expect(page.locator('body')).toContainText(/mcp/i);
   });
 
   test('should navigate to MCPServer detail page', async ({ page }) => {
     // Navigate to MCP Servers
-    await page.getByRole('link', { name: /mcp server/i }).click();
+    await page.getByRole('button', { name: /mcp server/i }).click();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -55,7 +55,7 @@ test.describe('MCPServer Read Operations', () => {
 
   test('should display MCPServer detail tabs', async ({ page }) => {
     // Navigate to MCP Servers
-    await page.getByRole('link', { name: /mcp server/i }).click();
+    await page.getByRole('button', { name: /mcp server/i }).click();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -84,7 +84,7 @@ test.describe('MCPServer Read Operations', () => {
 
   test('should display MCPServer type (python-runtime or node-runtime)', async ({ page }) => {
     // Navigate to MCP Servers
-    await page.getByRole('link', { name: /mcp server/i }).click();
+    await page.getByRole('button', { name: /mcp server/i }).click();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     

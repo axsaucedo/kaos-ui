@@ -20,20 +20,20 @@ test.describe('Agent Read Operations', () => {
 
   test('should display the Agent list page', async ({ page }) => {
     // Navigate to Agents
-    await page.getByRole('link', { name: /agents/i }).click();
+    await page.getByRole('button', { name: /agents/i }).click();
     await page.waitForLoadState('networkidle');
     
-    // Verify we're on the Agents page
-    await expect(page).toHaveURL(/\/agents/);
-    
-    // Should show some content
+    // Verify we're on the Agents tab (UI uses state-based navigation)
     const pageContent = await page.locator('body').textContent();
     expect(pageContent).toBeTruthy();
+    
+    // Should show Agent content
+    await expect(page.locator('body')).toContainText(/agent/i);
   });
 
   test('should navigate to Agent detail page', async ({ page }) => {
     // Navigate to Agents
-    await page.getByRole('link', { name: /agents/i }).click();
+    await page.getByRole('button', { name: /agents/i }).click();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -55,7 +55,7 @@ test.describe('Agent Read Operations', () => {
 
   test('should display Agent detail tabs including Chat', async ({ page }) => {
     // Navigate to Agents
-    await page.getByRole('link', { name: /agents/i }).click();
+    await page.getByRole('button', { name: /agents/i }).click();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
@@ -84,7 +84,7 @@ test.describe('Agent Read Operations', () => {
 
   test('should display Agent configuration with ModelAPI reference', async ({ page }) => {
     // Navigate to Agents
-    await page.getByRole('link', { name: /agents/i }).click();
+    await page.getByRole('button', { name: /agents/i }).click();
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
