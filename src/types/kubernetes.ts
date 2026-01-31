@@ -70,6 +70,9 @@ export interface ProxyConfig {
   // Models is the list of model identifiers supported by this proxy (required)
   // Examples: ["openai/gpt-5-mini", "gemini/*", "*"]
   models: string[];
+  // Provider is the LiteLLM provider prefix (e.g., "openai", "anthropic", "ollama")
+  // When set, model names are prefixed with this provider
+  provider?: string;
   // APIBase is the base URL of the backend LLM API to proxy to (e.g., http://host.docker.internal:11434)
   // Set as PROXY_API_BASE environment variable
   apiBase?: string;

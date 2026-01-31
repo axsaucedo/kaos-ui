@@ -190,6 +190,14 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
           
           {modelAPI.spec.mode === 'Proxy' && modelAPI.spec.proxyConfig && (
             <div className="space-y-3">
+              {modelAPI.spec.proxyConfig.provider && (
+                <div>
+                  <span className="text-sm text-muted-foreground">Provider</span>
+                  <code className="font-mono text-sm block bg-muted px-2 py-1 rounded mt-1">
+                    {modelAPI.spec.proxyConfig.provider}
+                  </code>
+                </div>
+              )}
               {modelAPI.spec.proxyConfig.apiBase && (
                 <div>
                   <span className="text-sm text-muted-foreground">API Base</span>
