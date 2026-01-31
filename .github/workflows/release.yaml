@@ -9,8 +9,6 @@ on:
 # Grant permissions for GitHub Pages deployment and releases
 permissions:
   contents: write
-  pages: write
-  id-token: write
   pull-requests: write
 
 # Prevent concurrent deployments
@@ -125,30 +123,11 @@ jobs:
           git add -A
           git commit -m "Release v${{ needs.validate.outputs.version }}: ${{ github.sha }}"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:gh-pages
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: deploy
-
-  # Deploy to GitHub Pages
-  deploy:
-    needs: [validate, build]
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          echo "✓ Pushed to gh-pages branch. GitHub Pages will auto-deploy."
 
   # Create GitHub Release
   create-release:
-    needs: [validate, deploy]
+    needs: [validate, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
