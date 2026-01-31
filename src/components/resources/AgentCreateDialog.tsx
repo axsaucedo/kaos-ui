@@ -151,8 +151,8 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
             description: data.description,
             instructions: data.instructions,
             memory: memoryConfig,
-            env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined,
           },
+          container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
         },
       };
 

@@ -32,13 +32,17 @@ export function MCPServerDetailDrawer({ mcpServer, open, onClose, onEdit }: MCPS
     }
   };
 
+  // Support both legacy (config.tools) and new (params) CRD format
   const toolsConfig = mcpServer.spec.config?.tools;
   const hasPackage = toolsConfig?.fromPackage;
   const hasString = toolsConfig?.fromString;
   
   // New CRD format uses runtime and params
-  const hasRuntime = mcpServer.spec.runtime;
+  const runtime = mcpServer.spec.runtime || mcpServer.spec.type;
   const hasParams = mcpServer.spec.params;
+  
+  // Environment variables (new: container.env, legacy: config.env)
+  const envVars = mcpServer.spec.container?.env || mcpServer.spec.config?.env;
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -64,40 +68,52 @@ export function MCPServerDetailDrawer({ mcpServer, open, onClose, onEdit }: MCPS
           <div className="space-y-6">
             {/* Type/Runtime */}
             <section>
-              <h3 className="text-sm font-semibold text-foreground mb-2">Type/Runtime</h3>
-              <Badge variant="secondary">{mcpServer.spec.runtime || mcpServer.spec.type || 'Unknown'}</Badge>
+              <h3 className="text-sm font-semibold text-foreground mb-2">Runtime</h3>
+              <Badge variant="secondary">{runtime || 'Unknown'}</Badge>
             </section>
 
             <Separator />
 
-            {/* Tools Configuration */}
+            {/* Tools Configuration / Params */}
             <section>
-              <h3 className="text-sm font-semibold text-foreground mb-2">Tools Configuration</h3>
+              <h3 className="text-sm font-semibold text-foreground mb-2">
+                {hasParams ? 'Parameters' : 'Tools Configuration'}
+              </h3>
               <div className="space-y-3">
+                {hasParams && (
+                  <div className="flex items-start gap-2">
+                    <Code className="h-4 w-4 text-muted-foreground mt-0.5" />
+                    <div className="flex-1">
+                      <pre className="text-xs font-mono text-foreground bg-muted/50 p-2 rounded overflow-auto max-h-[150px]">
+                        {mcpServer.spec.params}
+                      </pre>
+                    </div>
+                  </div>
+                )}
                 {hasPackage && (
                   <div className="flex items-start gap-2">
                     <Package className="h-4 w-4 text-muted-foreground mt-0.5" />
                     <div>
                       <span className="text-sm text-muted-foreground">From Package: </span>
                       <code className="text-sm font-mono text-foreground bg-muted/50 px-2 py-0.5 rounded">
-                        {toolsConfig.fromPackage}
+                        {toolsConfig?.fromPackage}
                       </code>
                     </div>
                   </div>
                 )}
-                {hasString && (
+                {hasString && !hasParams && (
                   <div className="flex items-start gap-2">
                     <Code className="h-4 w-4 text-muted-foreground mt-0.5" />
                     <div className="flex-1">
                       <span className="text-sm text-muted-foreground block mb-1">From Code:</span>
                       <pre className="text-xs font-mono text-foreground bg-muted/50 p-2 rounded overflow-auto max-h-[150px]">
-                        {toolsConfig.fromString}
+                        {toolsConfig?.fromString}
                       </pre>
                     </div>
                   </div>
                 )}
-                {!hasPackage && !hasString && (
-                  <p className="text-sm text-muted-foreground">No tools configured</p>
+                {!hasPackage && !hasString && !hasParams && (
+                  <p className="text-sm text-muted-foreground">No configuration</p>
                 )}
               </div>
             </section>
@@ -137,11 +153,11 @@ export function MCPServerDetailDrawer({ mcpServer, open, onClose, onEdit }: MCPS
             )}
 
             {/* Environment Variables */}
-            {mcpServer.spec.config.env && mcpServer.spec.config.env.length > 0 && (
+            {envVars && envVars.length > 0 && (
               <>
                 <section>
                   <h3 className="text-sm font-semibold text-foreground mb-2">
-                    Environment Variables ({mcpServer.spec.config.env.length})
+                    Environment Variables ({envVars.length})
                   </h3>
                   <div className="bg-muted/50 rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
@@ -152,7 +168,7 @@ export function MCPServerDetailDrawer({ mcpServer, open, onClose, onEdit }: MCPS
                         </tr>
                       </thead>
                       <tbody>
-                        {mcpServer.spec.config.env.map((envVar, idx) => (
+                        {envVars.map((envVar, idx) => (
                           <tr key={idx} className="border-b border-border last:border-0">
                             <td className="p-2 font-mono text-xs text-foreground">{envVar.name}</td>
                             <td className="p-2 font-mono text-xs text-muted-foreground truncate max-w-[200px]">

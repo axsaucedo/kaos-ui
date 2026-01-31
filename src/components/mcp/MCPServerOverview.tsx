@@ -282,39 +282,41 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
         </CardContent>
       </Card>
 
-      {/* Environment Variables - check both legacy config.env and new container.env */}
-      {((mcpServer.spec.config?.env && mcpServer.spec.config.env.length > 0) || 
-        (mcpServer.spec.container?.env && mcpServer.spec.container.env.length > 0)) && (
-        <Card className="md:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              Environment Variables ({(mcpServer.spec.config?.env?.length || 0) + (mcpServer.spec.container?.env?.length || 0)})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-muted/50 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...(mcpServer.spec.config?.env || []), ...(mcpServer.spec.container?.env || [])].map((envVar, idx) => (
-                    <tr key={idx} className="border-b border-border last:border-0">
-                      <td className="p-3 font-mono text-xs">{envVar.name}</td>
-                      <td className="p-3 font-mono text-xs text-muted-foreground truncate max-w-[300px]">
-                        {envVar.value || (envVar.valueFrom ? '<from secret/configmap>' : '-')}
-                      </td>
+      {/* Environment Variables - prefer new container.env, fallback to legacy config.env */}
+      {(() => {
+        const envVars = mcpServer.spec.container?.env || mcpServer.spec.config?.env || [];
+        return envVars.length > 0 && (
+          <Card className="md:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                Environment Variables ({envVars.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-muted/50 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">Value</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  </thead>
+                  <tbody>
+                    {envVars.map((envVar, idx) => (
+                      <tr key={idx} className="border-b border-border last:border-0">
+                        <td className="p-3 font-mono text-xs">{envVar.name}</td>
+                        <td className="p-3 font-mono text-xs text-muted-foreground truncate max-w-[300px]">
+                          {envVar.value || (envVar.valueFrom ? '<from secret/configmap>' : '-')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Labels & Annotations */}
       {(mcpServer.metadata.labels || mcpServer.metadata.annotations) && (

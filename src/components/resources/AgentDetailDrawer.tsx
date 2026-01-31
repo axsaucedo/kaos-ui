@@ -137,37 +137,40 @@ export function AgentDetailDrawer({ agent, open, onClose, onEdit }: AgentDetailD
 
             <Separator />
 
-            {/* Environment Variables */}
-            {agent.spec.config.env && agent.spec.config.env.length > 0 && (
-              <>
-                <section>
-                  <h3 className="text-sm font-semibold text-foreground mb-2">
-                    Environment Variables ({agent.spec.config.env.length})
-                  </h3>
-                  <div className="bg-muted/50 rounded-lg overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-border">
-                          <th className="text-left p-2 font-medium text-muted-foreground">Name</th>
-                          <th className="text-left p-2 font-medium text-muted-foreground">Value</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {agent.spec.config.env.map((envVar, idx) => (
-                          <tr key={idx} className="border-b border-border last:border-0">
-                            <td className="p-2 font-mono text-xs text-foreground">{envVar.name}</td>
-                            <td className="p-2 font-mono text-xs text-muted-foreground truncate max-w-[200px]">
-                              {envVar.value || (envVar.valueFrom ? '<from secret/configmap>' : '-')}
-                            </td>
+            {/* Environment Variables - prefer new container.env, fallback to legacy config.env */}
+            {(() => {
+              const envVars = agent.spec.container?.env || agent.spec.config?.env || [];
+              return envVars.length > 0 && (
+                <>
+                  <section>
+                    <h3 className="text-sm font-semibold text-foreground mb-2">
+                      Environment Variables ({envVars.length})
+                    </h3>
+                    <div className="bg-muted/50 rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-border">
+                            <th className="text-left p-2 font-medium text-muted-foreground">Name</th>
+                            <th className="text-left p-2 font-medium text-muted-foreground">Value</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-                <Separator />
-              </>
-            )}
+                        </thead>
+                        <tbody>
+                          {envVars.map((envVar, idx) => (
+                            <tr key={idx} className="border-b border-border last:border-0">
+                              <td className="p-2 font-mono text-xs text-foreground">{envVar.name}</td>
+                              <td className="p-2 font-mono text-xs text-muted-foreground truncate max-w-[200px]">
+                                {envVar.value || (envVar.valueFrom ? '<from secret/configmap>' : '-')}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                  <Separator />
+                </>
+              );
+            })()}
 
             {/* Status Details */}
             {agent.status && (
