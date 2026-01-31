@@ -63,7 +63,7 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
   const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
   const getToolsSource = (): 'package' | 'string' => {
-    if (mcpServer.spec.config.tools?.fromString) return 'string';
+    if (mcpServer.spec.config?.tools?.fromString) return 'string';
     return 'package';
   };
 
@@ -77,10 +77,10 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
     formState: { errors, isSubmitting },
   } = useForm<MCPServerFormData>({
     defaultValues: {
-      type: mcpServer.spec.type,
+      type: mcpServer.spec.type || mcpServer.spec.runtime || 'python-runtime',
       toolsSource: getToolsSource(),
-      fromPackage: mcpServer.spec.config.tools?.fromPackage || '',
-      fromString: mcpServer.spec.config.tools?.fromString || '',
+      fromPackage: mcpServer.spec.config?.tools?.fromPackage || '',
+      fromString: mcpServer.spec.config?.tools?.fromString || mcpServer.spec.params || '',
       gatewayTimeout: mcpServer.spec.gatewayRoute?.timeout || '',
       gatewayRetries: mcpServer.spec.gatewayRoute?.retries,
       labels: recordToArray(mcpServer.metadata.labels),
@@ -93,16 +93,16 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
 
   useEffect(() => {
     reset({
-      type: mcpServer.spec.type,
+      type: mcpServer.spec.type || mcpServer.spec.runtime || 'python-runtime',
       toolsSource: getToolsSource(),
-      fromPackage: mcpServer.spec.config.tools?.fromPackage || '',
-      fromString: mcpServer.spec.config.tools?.fromString || '',
+      fromPackage: mcpServer.spec.config?.tools?.fromPackage || '',
+      fromString: mcpServer.spec.config?.tools?.fromString || mcpServer.spec.params || '',
       gatewayTimeout: mcpServer.spec.gatewayRoute?.timeout || '',
       gatewayRetries: mcpServer.spec.gatewayRoute?.retries,
       labels: recordToArray(mcpServer.metadata.labels),
       annotations: recordToArray(mcpServer.metadata.annotations),
     });
-    setEnvVars(k8sEnvVarsToEntries(mcpServer.spec.config.env));
+    setEnvVars(k8sEnvVarsToEntries(mcpServer.spec.config?.env || mcpServer.spec.container?.env));
   }, [mcpServer, reset]);
 
   const onSubmit = async (data: MCPServerFormData) => {

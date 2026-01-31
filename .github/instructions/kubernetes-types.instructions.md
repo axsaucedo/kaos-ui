@@ -91,10 +91,29 @@ export interface ModelAPISpec {
 
 ### MCPServer
 
+**Note:** The MCPServer CRD was updated to use a new `runtime`/`params` pattern instead of `type`/`config.tools`. The UI supports both formats for backward compatibility.
+
 ```typescript
 export interface MCPServerSpec {
-  type: 'python-runtime' | 'node-runtime';
-  config: MCPServerConfig;
+  // New CRD format (v1alpha1 updated)
+  runtime?: string;              // e.g., "python-string", "kubernetes", "custom"
+  params?: string;               // Runtime-specific config (YAML string)
+  serviceAccountName?: string;   // For RBAC
+  container?: {
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
+  telemetry?: {
+    enabled?: boolean;
+    endpoint?: string;
+  };
+  
+  // Legacy CRD format (for backward compatibility)
+  type?: 'python-runtime' | 'node-runtime';
+  config?: MCPServerConfig;
+  
+  // Common fields
   gatewayRoute?: GatewayRoute;
   podSpec?: Record<string, unknown>;
 }

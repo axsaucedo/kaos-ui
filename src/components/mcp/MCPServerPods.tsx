@@ -167,11 +167,11 @@ export function MCPServerPods({ mcpServer }: MCPServerPodsProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Server className="h-4 w-4 text-primary" />
-              Type
+              Type/Runtime
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mcpServer.spec.type}</div>
+            <div className="text-2xl font-bold">{mcpServer.spec.runtime || mcpServer.spec.type || 'Unknown'}</div>
             <p className="text-xs text-muted-foreground">MCP Server Type</p>
           </CardContent>
         </Card>

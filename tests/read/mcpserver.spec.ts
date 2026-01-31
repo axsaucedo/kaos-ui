@@ -37,20 +37,26 @@ test.describe('MCPServer Read Operations', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
-    // Look for resource links/cards
-    const resourceLinks = page.locator('a[href*="/mcpservers/"]');
-    const count = await resourceLinks.count();
+    // The table rows should be visible with resource data
+    const rows = page.locator('table tbody tr');
+    const count = await rows.count();
     
-    if (count > 0) {
-      // Click the first resource
-      await resourceLinks.first().click();
-      await page.waitForLoadState('networkidle');
-      
-      // Should navigate to detail page
-      await expect(page).toHaveURL(/\/mcpservers\/[^/]+\/[^/]+/);
-    } else {
-      console.log('No MCPServer resources found in namespace');
-    }
+    // We expect resources in the test cluster - fail if none found
+    expect(count, 'Expected MCPServer resources in kaos-hierarchy namespace').toBeGreaterThan(0);
+    
+    // Click the view button (eye icon) on the first row
+    const viewButton = rows.first().locator('button').first();
+    await viewButton.click();
+    await page.waitForLoadState('networkidle');
+    
+    // Should navigate to detail page
+    await expect(page).toHaveURL(/\/mcpservers\/[^/]+\/[^/]+/);
+    
+    // Verify the page didn't crash - check for error boundaries or React error overlay
+    const hasError = await page.locator('text=Something went wrong').count() > 0 ||
+                     await page.locator('text=TypeError').count() > 0 ||
+                     await page.locator('text=Cannot read properties').count() > 0;
+    expect(hasError, 'Page should not display error messages').toBeFalsy();
   });
 
   test('should display MCPServer detail tabs', async ({ page }) => {
@@ -59,27 +65,26 @@ test.describe('MCPServer Read Operations', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
-    const resourceLinks = page.locator('a[href*="/mcpservers/"]');
-    const count = await resourceLinks.count();
+    const rows = page.locator('table tbody tr');
+    const count = await rows.count();
     
-    if (count > 0) {
-      await resourceLinks.first().click();
-      await page.waitForLoadState('networkidle');
-      
-      // Detail page should have tabs (Overview, Tools, Pods, YAML)
-      const tabList = page.locator('[role="tablist"]');
-      if (await tabList.count() > 0) {
-        await expect(tabList).toBeVisible();
-        
-        // MCPServer should have Tools tab
-        const toolsTab = page.locator('[role="tab"]', { hasText: /tools/i });
-        if (await toolsTab.count() > 0) {
-          await expect(toolsTab).toBeVisible();
-        }
-      }
-    } else {
-      console.log('No MCPServer resources found in namespace');
-    }
+    // We expect resources in the test cluster
+    expect(count, 'Expected MCPServer resources in kaos-hierarchy namespace').toBeGreaterThan(0);
+    
+    // Click view button on first row
+    const viewButton = rows.first().locator('button').first();
+    await viewButton.click();
+    await page.waitForLoadState('networkidle');
+    
+    // Verify no crash - check page still renders properly
+    const hasError = await page.locator('text=Something went wrong').count() > 0 ||
+                     await page.locator('text=TypeError').count() > 0 ||
+                     await page.locator('text=Cannot read properties').count() > 0;
+    expect(hasError, 'Page should not display error messages').toBeFalsy();
+    
+    // Detail page should have tabs (Overview, Tools, Pods, YAML)
+    const tabList = page.locator('[role="tablist"]');
+    await expect(tabList).toBeVisible();
   });
 
   test('should display MCPServer type (python-runtime or node-runtime)', async ({ page }) => {
@@ -88,21 +93,27 @@ test.describe('MCPServer Read Operations', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
-    const resourceLinks = page.locator('a[href*="/mcpservers/"]');
-    const count = await resourceLinks.count();
+    const rows = page.locator('table tbody tr');
+    const count = await rows.count();
     
-    if (count > 0) {
-      await resourceLinks.first().click();
-      await page.waitForLoadState('networkidle');
-      
-      // MCPServer detail should show the runtime type
-      const pageContent = await page.locator('body').textContent() || '';
-      
-      // Should contain python-runtime or node-runtime
-      const hasRuntimeType = pageContent.includes('python') || pageContent.includes('node');
-      expect(hasRuntimeType || pageContent.length > 100).toBeTruthy();
-    } else {
-      console.log('No MCPServer resources found in namespace');
-    }
+    // We expect resources in the test cluster
+    expect(count, 'Expected MCPServer resources in kaos-hierarchy namespace').toBeGreaterThan(0);
+    
+    // Click view button on first row
+    const viewButton = rows.first().locator('button').first();
+    await viewButton.click();
+    await page.waitForLoadState('networkidle');
+    
+    // Verify no crash
+    const hasError = await page.locator('text=Something went wrong').count() > 0 ||
+                     await page.locator('text=TypeError').count() > 0 ||
+                     await page.locator('text=Cannot read properties').count() > 0;
+    expect(hasError, 'Page should not display error messages').toBeFalsy();
+    
+    // MCPServer detail should show the runtime type or be properly rendered
+    const pageContent = await page.locator('body').textContent() || '';
+    
+    // Page should contain meaningful content (not just error messages)
+    expect(pageContent.length).toBeGreaterThan(100);
   });
 });

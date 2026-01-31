@@ -32,9 +32,13 @@ export function MCPServerDetailDrawer({ mcpServer, open, onClose, onEdit }: MCPS
     }
   };
 
-  const toolsConfig = mcpServer.spec.config.tools;
+  const toolsConfig = mcpServer.spec.config?.tools;
   const hasPackage = toolsConfig?.fromPackage;
   const hasString = toolsConfig?.fromString;
+  
+  // New CRD format uses runtime and params
+  const hasRuntime = mcpServer.spec.runtime;
+  const hasParams = mcpServer.spec.params;
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -58,10 +62,10 @@ export function MCPServerDetailDrawer({ mcpServer, open, onClose, onEdit }: MCPS
 
         <ScrollArea className="h-[calc(100vh-180px)] pr-4">
           <div className="space-y-6">
-            {/* Type */}
+            {/* Type/Runtime */}
             <section>
-              <h3 className="text-sm font-semibold text-foreground mb-2">Type</h3>
-              <Badge variant="secondary">{mcpServer.spec.type}</Badge>
+              <h3 className="text-sm font-semibold text-foreground mb-2">Type/Runtime</h3>
+              <Badge variant="secondary">{mcpServer.spec.runtime || mcpServer.spec.type || 'Unknown'}</Badge>
             </section>
 
             <Separator />

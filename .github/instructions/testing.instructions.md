@@ -185,7 +185,43 @@ await page.getByText('Overview').click();
 await page.locator('.btn-primary').click();
 ```
 
-### 3. Keep Tests Independent
+### 3. Navigate Resource Lists via Table Rows
+The UI uses tables with action buttons, not links. Navigate to detail pages by:
+```typescript
+// Click view button in table row
+const rows = page.locator('table tbody tr');
+const count = await rows.count();
+expect(count, 'Expected resources').toBeGreaterThan(0);
+
+const viewButton = rows.first().locator('button').first();
+await viewButton.click();
+await page.waitForLoadState('networkidle');
+```
+
+### 4. Detect React Crashes
+Always check for error messages after navigation:
+```typescript
+const hasError = await page.locator('text=Something went wrong').count() > 0 ||
+                 await page.locator('text=TypeError').count() > 0 ||
+                 await page.locator('text=Cannot read properties').count() > 0;
+expect(hasError, 'Page should not display error messages').toBeFalsy();
+```
+
+### 5. Don't Silently Pass When No Resources
+Fail tests when expected resources are missing:
+```typescript
+// BAD - silent pass
+if (count > 0) {
+  // test...
+} else {
+  console.log('No resources found');
+}
+
+// GOOD - explicit failure
+expect(count, 'Expected resources in namespace').toBeGreaterThan(0);
+```
+
+### 6. Keep Tests Independent
 Each test should:
 - Set up its own state
 - Not depend on other tests
