@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { Server } from 'lucide-react';
 import {
   Dialog,
@@ -15,7 +15,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Select,
   SelectContent,
@@ -32,13 +31,15 @@ import {
   k8sEnvVarsToEntries,
 } from './shared/EnvVarEditorWithSecrets';
 import { LabelsAnnotationsEditor } from '@/components/shared/LabelsAnnotationsEditor';
-import type { MCPServer, MCPServerType } from '@/types/kubernetes';
+import type { MCPServer } from '@/types/kubernetes';
+
+// Runtime options for new CRD format
+type MCPServerRuntime = 'python-string' | 'kubernetes' | 'custom';
 
 interface MCPServerFormData {
-  type: MCPServerType;
-  toolsSource: 'package' | 'string';
-  fromPackage: string;
-  fromString: string;
+  runtime: MCPServerRuntime;
+  params: string;
+  serviceAccountName: string;
   gatewayTimeout: string;
   gatewayRetries: number | undefined;
   labels: { key: string; value: string }[];
@@ -62,9 +63,21 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
   const { updateMCPServer } = useKubernetesConnection();
   const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
-  const getToolsSource = (): 'package' | 'string' => {
-    if (mcpServer.spec.config.tools?.fromString) return 'string';
-    return 'package';
+  // Determine runtime from spec (support both legacy and new format)
+  const getRuntime = (): MCPServerRuntime => {
+    if (mcpServer.spec.runtime) return mcpServer.spec.runtime as MCPServerRuntime;
+    // Legacy type mapping
+    if (mcpServer.spec.type === 'python-runtime') return 'python-string';
+    if (mcpServer.spec.type === 'node-runtime') return 'custom';
+    return 'python-string';
+  };
+
+  // Get params from spec (support both legacy and new format)
+  const getParams = (): string => {
+    if (mcpServer.spec.params) return mcpServer.spec.params;
+    if (mcpServer.spec.config?.tools?.fromString) return mcpServer.spec.config.tools.fromString;
+    if (mcpServer.spec.config?.tools?.fromPackage) return mcpServer.spec.config.tools.fromPackage;
+    return '';
   };
 
   const {
@@ -77,10 +90,9 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
     formState: { errors, isSubmitting },
   } = useForm<MCPServerFormData>({
     defaultValues: {
-      type: mcpServer.spec.type,
-      toolsSource: getToolsSource(),
-      fromPackage: mcpServer.spec.config.tools?.fromPackage || '',
-      fromString: mcpServer.spec.config.tools?.fromString || '',
+      runtime: getRuntime(),
+      params: getParams(),
+      serviceAccountName: mcpServer.spec.serviceAccountName || '',
       gatewayTimeout: mcpServer.spec.gatewayRoute?.timeout || '',
       gatewayRetries: mcpServer.spec.gatewayRoute?.retries,
       labels: recordToArray(mcpServer.metadata.labels),
@@ -88,21 +100,19 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
     },
   });
 
-  const watchedType = watch('type');
-  const watchedToolsSource = watch('toolsSource');
+  const watchedRuntime = watch('runtime');
 
   useEffect(() => {
     reset({
-      type: mcpServer.spec.type,
-      toolsSource: getToolsSource(),
-      fromPackage: mcpServer.spec.config.tools?.fromPackage || '',
-      fromString: mcpServer.spec.config.tools?.fromString || '',
+      runtime: getRuntime(),
+      params: getParams(),
+      serviceAccountName: mcpServer.spec.serviceAccountName || '',
       gatewayTimeout: mcpServer.spec.gatewayRoute?.timeout || '',
       gatewayRetries: mcpServer.spec.gatewayRoute?.retries,
       labels: recordToArray(mcpServer.metadata.labels),
       annotations: recordToArray(mcpServer.metadata.annotations),
     });
-    setEnvVars(k8sEnvVarsToEntries(mcpServer.spec.config.env));
+    setEnvVars(k8sEnvVarsToEntries(mcpServer.spec.container?.env || mcpServer.spec.config?.env));
   }, [mcpServer, reset]);
 
   const onSubmit = async (data: MCPServerFormData) => {
@@ -119,13 +129,10 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
           annotations: Object.keys(annotations).length > 0 ? annotations : undefined,
         },
         spec: {
-          type: data.type,
-          config: {
-            tools: data.toolsSource === 'package'
-              ? { fromPackage: data.fromPackage }
-              : { fromString: data.fromString },
-            env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined,
-          },
+          runtime: data.runtime,
+          params: data.params || undefined,
+          serviceAccountName: data.serviceAccountName || undefined,
+          container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
           gatewayRoute: (data.gatewayTimeout || data.gatewayRetries)
             ? {
                 timeout: data.gatewayTimeout || undefined,
@@ -172,73 +179,66 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
         <form onSubmit={handleSubmit(onSubmit)}>
           <ScrollArea className="h-[calc(90vh-220px)] pr-4">
             <div className="space-y-6 py-4">
-              {/* Type */}
+              {/* Runtime */}
               <div className="space-y-2">
-                <Label>Runtime Type</Label>
+                <Label>Runtime</Label>
                 <Select
-                  value={watchedType}
-                  onValueChange={(value: MCPServerType) => setValue('type', value)}
+                  value={watchedRuntime}
+                  onValueChange={(value: MCPServerRuntime) => setValue('runtime', value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select runtime type" />
+                    <SelectValue placeholder="Select runtime" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="python-runtime">Python Runtime</SelectItem>
-                    <SelectItem value="node-runtime">Node.js Runtime</SelectItem>
+                    <SelectItem value="python-string">Python String</SelectItem>
+                    <SelectItem value="kubernetes">Kubernetes</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {watchedType === 'python-runtime' 
-                    ? 'Uses Python to run MCP server packages (uvx)'
-                    : 'Uses Node.js to run MCP server packages (npx)'
-                  }
+                  {watchedRuntime === 'python-string' && 'Runs Python MCP tools from a string definition'}
+                  {watchedRuntime === 'kubernetes' && 'Provides Kubernetes API tools (requires RBAC)'}
+                  {watchedRuntime === 'custom' && 'Custom runtime configuration'}
                 </p>
               </div>
 
-              {/* Tools Configuration */}
+              {/* Params */}
               <div className="space-y-2">
-                <Label>Tools Source</Label>
-                <Tabs value={watchedToolsSource} onValueChange={(v) => setValue('toolsSource', v as 'package' | 'string')}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="package">From Package</TabsTrigger>
-                    <TabsTrigger value="string">From Code</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="package" className="space-y-2 mt-4">
-                    <Label htmlFor="fromPackage">Package Name</Label>
-                    <Input
-                      id="fromPackage"
-                      {...register('fromPackage', { 
-                        required: watchedToolsSource === 'package' ? 'Package name is required' : false 
-                      })}
-                      placeholder={watchedType === 'python-runtime' ? 'e.g., mcp-server-calculator' : 'e.g., @anthropic/mcp-server-github'}
-                      className="font-mono"
-                    />
-                    {errors.fromPackage && (
-                      <p className="text-sm text-destructive">{errors.fromPackage.message}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Package to run with {watchedType === 'python-runtime' ? 'uvx' : 'npx'}
-                    </p>
-                  </TabsContent>
-                  <TabsContent value="string" className="space-y-2 mt-4">
-                    <Label htmlFor="fromString">Tool Definition Code</Label>
-                    <Textarea
-                      id="fromString"
-                      {...register('fromString', {
-                        required: watchedToolsSource === 'string' ? 'Tool definition is required' : false
-                      })}
-                      placeholder="# Python code defining MCP tools..."
-                      className="font-mono text-xs min-h-[150px]"
-                    />
-                    {errors.fromString && (
-                      <p className="text-sm text-destructive">{errors.fromString.message}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Python literal string defining tools dynamically
-                    </p>
-                  </TabsContent>
-                </Tabs>
+                <Label htmlFor="params">Parameters</Label>
+                <Textarea
+                  id="params"
+                  {...register('params')}
+                  placeholder={
+                    watchedRuntime === 'python-string' 
+                      ? '# Python tool definitions...'
+                      : watchedRuntime === 'kubernetes'
+                      ? 'namespaces: default,kaos-system'
+                      : 'Runtime-specific parameters...'
+                  }
+                  className="font-mono text-xs min-h-[120px]"
+                />
+                <p className="text-xs text-muted-foreground">
+                  {watchedRuntime === 'python-string' && 'Python code defining MCP tools'}
+                  {watchedRuntime === 'kubernetes' && 'Kubernetes runtime parameters (e.g., namespaces)'}
+                  {watchedRuntime === 'custom' && 'Parameters passed to the custom runtime'}
+                </p>
               </div>
+
+              {/* Service Account (for kubernetes runtime) */}
+              {watchedRuntime === 'kubernetes' && (
+                <div className="space-y-2">
+                  <Label htmlFor="serviceAccountName">Service Account Name</Label>
+                  <Input
+                    id="serviceAccountName"
+                    {...register('serviceAccountName')}
+                    placeholder="e.g., mcp-kubernetes-sa"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Kubernetes service account for RBAC permissions
+                  </p>
+                </div>
+              )}
 
               <Separator />
 

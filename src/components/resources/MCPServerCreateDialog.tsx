@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
@@ -31,14 +30,16 @@ import {
   envVarEntriesToK8sEnvVars 
 } from './shared/EnvVarEditorWithSecrets';
 import { validateKubernetesName } from './shared/EnvVarEditor';
-import type { MCPServer, MCPServerType } from '@/types/kubernetes';
+import type { MCPServer } from '@/types/kubernetes';
+
+// Runtime options based on KAOS registry
+type MCPServerRuntime = 'python-string' | 'kubernetes' | 'custom';
 
 interface MCPServerFormData {
   name: string;
-  type: MCPServerType;
-  toolsSource: 'package' | 'string';
-  fromPackage: string;
-  fromString: string;
+  runtime: MCPServerRuntime;
+  params: string;
+  serviceAccountName: string;
 }
 
 interface MCPServerCreateDialogProps {
@@ -62,15 +63,13 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
   } = useForm<MCPServerFormData>({
     defaultValues: {
       name: '',
-      type: 'python-runtime',
-      toolsSource: 'package',
-      fromPackage: '',
-      fromString: '',
+      runtime: 'python-string',
+      params: '',
+      serviceAccountName: '',
     },
   });
 
-  const watchedType = watch('type');
-  const watchedToolsSource = watch('toolsSource');
+  const watchedRuntime = watch('runtime');
 
   const validateUniqueName = (name: string) => {
     if (mcpServers.some((server) => server.metadata.name === name)) {
@@ -91,13 +90,10 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
           namespace: namespace || 'default',
         },
         spec: {
-          type: data.type,
-          config: {
-            tools: data.toolsSource === 'package' 
-              ? { fromPackage: data.fromPackage }
-              : { fromString: data.fromString },
-            env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined,
-          },
+          runtime: data.runtime,
+          params: data.params || undefined,
+          serviceAccountName: data.serviceAccountName || undefined,
+          container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
         },
       };
 
@@ -124,6 +120,37 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
     reset();
     setEnvVars([]);
     onClose();
+  };
+
+  const getRuntimeDescription = (runtime: MCPServerRuntime) => {
+    switch (runtime) {
+      case 'python-string':
+        return 'Define Python tools inline. Params are passed via MCP_TOOLS_STRING env var.';
+      case 'kubernetes':
+        return 'Access Kubernetes API. Requires serviceAccountName with proper RBAC.';
+      case 'custom':
+        return 'Use a custom container image. Specify image in environment settings.';
+      default:
+        return '';
+    }
+  };
+
+  const getParamsPlaceholder = (runtime: MCPServerRuntime) => {
+    switch (runtime) {
+      case 'python-string':
+        return `def greet(name: str) -> str:
+    """Greet someone by name."""
+    return f"Hello, {name}!"`;
+      case 'kubernetes':
+        return `# YAML configuration for kubernetes runtime
+namespaces:
+  - default
+  - kaos-hierarchy`;
+      case 'custom':
+        return '# Custom runtime configuration';
+      default:
+        return '';
+    }
   };
 
   return (
@@ -167,76 +194,65 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
                 )}
               </div>
 
-              {/* Type */}
+              {/* Runtime */}
               <div className="space-y-2">
-                <Label>Type</Label>
+                <Label>Runtime</Label>
                 <Select
-                  value={watchedType}
-                  onValueChange={(value: MCPServerType) => setValue('type', value)}
+                  value={watchedRuntime}
+                  onValueChange={(value: MCPServerRuntime) => setValue('runtime', value)}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select runtime type" />
+                    <SelectValue placeholder="Select runtime" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="python-runtime">
-                      Python Runtime
+                    <SelectItem value="python-string">
+                      Python String
                     </SelectItem>
-                    <SelectItem value="node-runtime">
-                      Node.js Runtime
+                    <SelectItem value="kubernetes">
+                      Kubernetes
+                    </SelectItem>
+                    <SelectItem value="custom">
+                      Custom
                     </SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  {watchedType === 'python-runtime' 
-                    ? 'Uses Python to run MCP server packages (uvx)'
-                    : 'Uses Node.js to run MCP server packages (npx)'
-                  }
+                  {getRuntimeDescription(watchedRuntime)}
                 </p>
               </div>
 
-              {/* Tools Configuration */}
+              {/* Service Account Name (for kubernetes runtime) */}
+              {watchedRuntime === 'kubernetes' && (
+                <div className="space-y-2">
+                  <Label htmlFor="serviceAccountName">Service Account Name</Label>
+                  <Input
+                    id="serviceAccountName"
+                    {...register('serviceAccountName')}
+                    placeholder="kaos-mcp-kubernetes"
+                    className="font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Create with: kaos system create-rbac --namespace {namespace || 'default'}
+                  </p>
+                </div>
+              )}
+
+              {/* Params */}
               <div className="space-y-2">
-                <Label>Tools Source</Label>
-                <Tabs value={watchedToolsSource} onValueChange={(v) => setValue('toolsSource', v as 'package' | 'string')}>
-                  <TabsList className="grid w-full grid-cols-2">
-                    <TabsTrigger value="package">From Package</TabsTrigger>
-                    <TabsTrigger value="string">From Code</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="package" className="space-y-2 mt-4">
-                    <Label htmlFor="fromPackage">Package Name</Label>
-                    <Input
-                      id="fromPackage"
-                      {...register('fromPackage', { 
-                        required: watchedToolsSource === 'package' ? 'Package name is required' : false 
-                      })}
-                      placeholder={watchedType === 'python-runtime' ? 'e.g., mcp-server-calculator' : 'e.g., @anthropic/mcp-server-github'}
-                      className="font-mono"
-                    />
-                    {errors.fromPackage && (
-                      <p className="text-sm text-destructive">{errors.fromPackage.message}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Package to run with {watchedType === 'python-runtime' ? 'uvx' : 'npx'}
-                    </p>
-                  </TabsContent>
-                  <TabsContent value="string" className="space-y-2 mt-4">
-                    <Label htmlFor="fromString">Tool Definition Code</Label>
-                    <Textarea
-                      id="fromString"
-                      {...register('fromString', {
-                        required: watchedToolsSource === 'string' ? 'Tool definition is required' : false
-                      })}
-                      placeholder="# Python code defining MCP tools dynamically..."
-                      className="font-mono text-xs min-h-[150px]"
-                    />
-                    {errors.fromString && (
-                      <p className="text-sm text-destructive">{errors.fromString.message}</p>
-                    )}
-                    <p className="text-xs text-muted-foreground">
-                      Python literal string defining tools dynamically
-                    </p>
-                  </TabsContent>
-                </Tabs>
+                <Label htmlFor="params">
+                  {watchedRuntime === 'python-string' ? 'Tool Definition (Python)' : 'Configuration (Params)'}
+                </Label>
+                <Textarea
+                  id="params"
+                  {...register('params', {
+                    required: watchedRuntime === 'python-string' ? 'Tool definition is required' : false
+                  })}
+                  placeholder={getParamsPlaceholder(watchedRuntime)}
+                  className="font-mono text-xs min-h-[150px]"
+                />
+                {errors.params && (
+                  <p className="text-sm text-destructive">{errors.params.message}</p>
+                )}
               </div>
 
               {/* Environment Variables with Secrets */}

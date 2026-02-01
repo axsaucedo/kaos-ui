@@ -75,6 +75,15 @@ jobs:
           # Add .nojekyll
           touch deploy/.nojekyll
           
+          # Generate/update versions.json from git tags (filter out v0.0.x test tags)
+          echo "Generating versions.json..."
+          VERSIONS_JSON=$(git tag --list "v*" --sort=-v:refname | grep -v '^v0\.0\.' | sed 's/^v//' | head -10 | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          # Get latest version (first in the list, without the v prefix)
+          LATEST=$(echo "$VERSIONS_JSON" | jq -r '.[0] // ""')
+          echo "{\"versions\": $VERSIONS_JSON, \"latest\": \"$LATEST\"}" > deploy/versions.json
+          echo "versions.json content:"
+          cat deploy/versions.json
+          
           # Deploy to /dev/ path
           rm -rf deploy/dev
           mkdir -p deploy/dev

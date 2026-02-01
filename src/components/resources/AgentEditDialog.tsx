@@ -132,7 +132,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
       labels: recordToArray(agent.metadata.labels),
       annotations: recordToArray(agent.metadata.annotations),
     });
-    setEnvVars(k8sEnvVarsToEntries(agent.spec.config?.env));
+    setEnvVars(k8sEnvVarsToEntries(agent.spec.container?.env || agent.spec.config?.env));
   }, [agent, reset]);
 
   const onSubmit = async (data: AgentFormData) => {
@@ -177,8 +177,8 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
             instructions: data.instructions || undefined,
             reasoningLoopMaxSteps: data.reasoningLoopMaxSteps || undefined,
             memory: memoryConfig,
-            env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined,
           },
+          container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
         },
       };
 

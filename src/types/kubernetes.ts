@@ -109,6 +109,12 @@ export interface ModelAPISpec {
   hostedConfig?: HostedConfig;
   // GatewayRoute configures Gateway API routing (timeout, etc.)
   gatewayRoute?: GatewayRoute;
+  // Container provides shorthand container overrides (NEW: env moved here)
+  container?: {
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
   // PodSpec allows overriding the generated pod spec
   podSpec?: Record<string, unknown>;
 }
@@ -175,14 +181,36 @@ export interface MCPServerConfig {
 }
 
 export interface MCPServerSpec {
+  // New CRD format (v1alpha1 updated)
+  // Runtime identifier from ConfigMap registry or "custom"
+  runtime?: string;
+  // Params is runtime-specific configuration (string, typically YAML)
+  params?: string;
+  // ServiceAccountName for RBAC
+  serviceAccountName?: string;
+  
+  // Legacy CRD format (for backward compatibility)
   // Type specifies the MCP server runtime type
-  type: MCPServerType;
-  // Config contains the MCP server configuration
-  config: MCPServerConfig;
+  type?: MCPServerType;
+  // Config contains the MCP server configuration (legacy)
+  config?: MCPServerConfig;
+  
+  // Common fields
   // GatewayRoute configures Gateway API routing (timeout, etc.)
   gatewayRoute?: GatewayRoute;
   // PodSpec allows overriding the generated pod spec
   podSpec?: Record<string, unknown>;
+  // Container provides shorthand container overrides
+  container?: {
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
+  // Telemetry configures OpenTelemetry instrumentation
+  telemetry?: {
+    enabled?: boolean;
+    endpoint?: string;
+  };
 }
 
 export interface MCPServerStatus {
@@ -262,6 +290,12 @@ export interface AgentSpec {
   waitForDependencies?: boolean;
   // GatewayRoute configures Gateway API routing (timeout, etc.)
   gatewayRoute?: GatewayRoute;
+  // Container provides shorthand container overrides (NEW: env moved here from config.env)
+  container?: {
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
   // PodSpec allows overriding the generated pod spec
   podSpec?: Record<string, unknown>;
 }

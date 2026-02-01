@@ -36,25 +36,28 @@ test.describe('ModelAPI Read Operations', () => {
     // Navigate to ModelAPIs
     await page.getByRole('button', { name: /model api/i }).click();
     await page.waitForLoadState('networkidle');
-    
-    // Wait for the page to load and click on a ModelAPI if available
     await page.waitForTimeout(2000);
     
-    // Look for resource links/cards
-    const resourceLinks = page.locator('a[href*="/modelapis/"]');
-    const count = await resourceLinks.count();
+    // The table rows should be visible with resource data
+    const rows = page.locator('table tbody tr');
+    const count = await rows.count();
     
-    if (count > 0) {
-      // Click the first resource
-      await resourceLinks.first().click();
-      await page.waitForLoadState('networkidle');
-      
-      // Should navigate to detail page
-      await expect(page).toHaveURL(/\/modelapis\/[^/]+\/[^/]+/);
-    } else {
-      // No resources in namespace, test passes if list page loads
-      console.log('No ModelAPI resources found in namespace');
-    }
+    // We expect resources in the test cluster - fail if none found
+    expect(count, 'Expected ModelAPI resources in kaos-hierarchy namespace').toBeGreaterThan(0);
+    
+    // Click the view button (eye icon) on the first row
+    const viewButton = rows.first().locator('button').first();
+    await viewButton.click();
+    await page.waitForLoadState('networkidle');
+    
+    // Should navigate to detail page
+    await expect(page).toHaveURL(/\/modelapis\/[^/]+\/[^/]+/);
+    
+    // Verify the page didn't crash
+    const hasError = await page.locator('text=Something went wrong').count() > 0 ||
+                     await page.locator('text=TypeError').count() > 0 ||
+                     await page.locator('text=Cannot read properties').count() > 0;
+    expect(hasError, 'Page should not display error messages').toBeFalsy();
   });
 
   test('should display ModelAPI detail tabs', async ({ page }) => {
@@ -63,26 +66,26 @@ test.describe('ModelAPI Read Operations', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
-    const resourceLinks = page.locator('a[href*="/modelapis/"]');
-    const count = await resourceLinks.count();
+    const rows = page.locator('table tbody tr');
+    const count = await rows.count();
     
-    if (count > 0) {
-      await resourceLinks.first().click();
-      await page.waitForLoadState('networkidle');
-      
-      // Detail page should have tabs (Overview, Pods, YAML)
-      const tabList = page.locator('[role="tablist"]');
-      if (await tabList.count() > 0) {
-        await expect(tabList).toBeVisible();
-        
-        // Check for common tabs
-        const tabs = page.locator('[role="tab"]');
-        const tabCount = await tabs.count();
-        expect(tabCount).toBeGreaterThan(0);
-      }
-    } else {
-      console.log('No ModelAPI resources found in namespace');
-    }
+    // We expect resources in the test cluster
+    expect(count, 'Expected ModelAPI resources in kaos-hierarchy namespace').toBeGreaterThan(0);
+    
+    // Click view button on first row
+    const viewButton = rows.first().locator('button').first();
+    await viewButton.click();
+    await page.waitForLoadState('networkidle');
+    
+    // Verify no crash
+    const hasError = await page.locator('text=Something went wrong').count() > 0 ||
+                     await page.locator('text=TypeError').count() > 0 ||
+                     await page.locator('text=Cannot read properties').count() > 0;
+    expect(hasError, 'Page should not display error messages').toBeFalsy();
+    
+    // Detail page should have tabs (Overview, Pods, YAML)
+    const tabList = page.locator('[role="tablist"]');
+    await expect(tabList).toBeVisible();
   });
 
   test('should display ModelAPI configuration details', async ({ page }) => {
@@ -91,21 +94,28 @@ test.describe('ModelAPI Read Operations', () => {
     await page.waitForLoadState('networkidle');
     await page.waitForTimeout(2000);
     
-    const resourceLinks = page.locator('a[href*="/modelapis/"]');
-    const count = await resourceLinks.count();
+    const rows = page.locator('table tbody tr');
+    const count = await rows.count();
     
-    if (count > 0) {
-      await resourceLinks.first().click();
-      await page.waitForLoadState('networkidle');
-      
-      // Detail page should show mode (Proxy or Hosted)
-      const pageContent = await page.locator('body').textContent() || '';
-      
-      // Should contain either Proxy or Hosted mode indication
-      const hasProxyOrHosted = pageContent.includes('Proxy') || pageContent.includes('Hosted');
-      expect(hasProxyOrHosted).toBeTruthy();
-    } else {
-      console.log('No ModelAPI resources found in namespace');
-    }
+    // We expect resources in the test cluster
+    expect(count, 'Expected ModelAPI resources in kaos-hierarchy namespace').toBeGreaterThan(0);
+    
+    // Click view button on first row
+    const viewButton = rows.first().locator('button').first();
+    await viewButton.click();
+    await page.waitForLoadState('networkidle');
+    
+    // Verify no crash
+    const hasError = await page.locator('text=Something went wrong').count() > 0 ||
+                     await page.locator('text=TypeError').count() > 0 ||
+                     await page.locator('text=Cannot read properties').count() > 0;
+    expect(hasError, 'Page should not display error messages').toBeFalsy();
+    
+    // Detail page should show mode (Proxy or Hosted)
+    const pageContent = await page.locator('body').textContent() || '';
+    
+    // Should contain either Proxy or Hosted mode indication
+    const hasProxyOrHosted = pageContent.includes('Proxy') || pageContent.includes('Hosted');
+    expect(hasProxyOrHosted).toBeTruthy();
   });
 });

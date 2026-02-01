@@ -84,17 +84,23 @@ export function MCPServerList() {
       key: 'type',
       header: 'Type',
       render: (item: MCPServer) => (
-        <Badge variant="secondary">{item.spec.type}</Badge>
+        <Badge variant="secondary">{item.spec.runtime || item.spec.type || 'Unknown'}</Badge>
       ),
     },
     {
       key: 'toolsSource',
       header: 'Tools Source',
-      render: (item: MCPServer) => (
-        <span className="text-sm text-muted-foreground font-mono">
-          {item.spec.config.tools?.fromPackage || item.spec.config.tools?.fromString?.slice(0, 30) || '-'}
-        </span>
-      ),
+      render: (item: MCPServer) => {
+        // Support both new (runtime/params) and legacy (config.tools) formats
+        const params = item.spec.params;
+        const tools = item.spec.config?.tools;
+        const source = params?.slice(0, 30) || tools?.fromPackage || tools?.fromString?.slice(0, 30) || '-';
+        return (
+          <span className="text-sm text-muted-foreground font-mono">
+            {source}
+          </span>
+        );
+      },
     },
     {
       key: 'availableTools',

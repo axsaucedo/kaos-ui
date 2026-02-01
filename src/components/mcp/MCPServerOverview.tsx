@@ -22,10 +22,15 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
     }
   };
 
-  const toolsConfig = mcpServer.spec.config.tools;
+  // Handle both legacy (config.tools) and new (runtime/params) MCPServer specs
+  const toolsConfig = mcpServer.spec.config?.tools;
   const hasPackage = toolsConfig?.fromPackage;
   const hasString = toolsConfig?.fromString;
   const hasSecretRef = toolsConfig?.fromSecretKeyRef;
+  
+  // New CRD format uses runtime and params
+  const hasRuntime = mcpServer.spec.runtime;
+  const hasParams = mcpServer.spec.params;
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -48,9 +53,9 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
               <p className="font-mono font-medium">{mcpServer.metadata.namespace || 'default'}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">Type</span>
+              <span className="text-muted-foreground">Type/Runtime</span>
               <p>
-                <Badge variant="secondary">{mcpServer.spec.type}</Badge>
+                <Badge variant="secondary">{mcpServer.spec.runtime || mcpServer.spec.type || 'Unknown'}</Badge>
               </p>
             </div>
             <div>
@@ -157,15 +162,41 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
         />
       )}
 
-      {/* Tools Configuration */}
+      {/* Runtime Configuration (new format) or Tools Configuration (legacy) */}
       <Card className="md:col-span-2">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Code className="h-4 w-4 text-mcpserver" />
-            Tools Configuration
+            {hasRuntime ? 'Runtime Configuration' : 'Tools Configuration'}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* New runtime/params format */}
+          {hasRuntime && (
+            <div className="flex items-start gap-3">
+              <Server className="h-5 w-5 text-muted-foreground mt-0.5" />
+              <div>
+                <span className="text-sm text-muted-foreground">Runtime</span>
+                <code className="font-mono text-sm block bg-muted px-2 py-1 rounded mt-1">
+                  {mcpServer.spec.runtime}
+                </code>
+              </div>
+            </div>
+          )}
+          
+          {hasParams && (
+            <div className="flex items-start gap-3">
+              <Code className="h-5 w-5 text-muted-foreground mt-0.5" />
+              <div className="flex-1">
+                <span className="text-sm text-muted-foreground">Params</span>
+                <pre className="font-mono text-xs bg-muted p-3 rounded mt-1 overflow-auto max-h-[200px]">
+                  {mcpServer.spec.params}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {/* Legacy tools format */}
           {hasPackage && (
             <div className="flex items-start gap-3">
               <Package className="h-5 w-5 text-muted-foreground mt-0.5" />
@@ -202,8 +233,8 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
             </div>
           )}
           
-          {!hasPackage && !hasString && !hasSecretRef && (
-            <p className="text-sm text-muted-foreground">No tools configured</p>
+          {!hasRuntime && !hasParams && !hasPackage && !hasString && !hasSecretRef && (
+            <p className="text-sm text-muted-foreground">No configuration specified</p>
           )}
 
           {/* Available Tools List */}
@@ -251,38 +282,41 @@ export function MCPServerOverview({ mcpServer }: MCPServerOverviewProps) {
         </CardContent>
       </Card>
 
-      {/* Environment Variables */}
-      {mcpServer.spec.config.env && mcpServer.spec.config.env.length > 0 && (
-        <Card className="md:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              Environment Variables ({mcpServer.spec.config.env.length})
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="bg-muted/50 rounded-lg overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
-                    <th className="text-left p-3 font-medium text-muted-foreground">Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {mcpServer.spec.config.env.map((envVar, idx) => (
-                    <tr key={idx} className="border-b border-border last:border-0">
-                      <td className="p-3 font-mono text-xs">{envVar.name}</td>
-                      <td className="p-3 font-mono text-xs text-muted-foreground truncate max-w-[300px]">
-                        {envVar.value || (envVar.valueFrom ? '<from secret/configmap>' : '-')}
-                      </td>
+      {/* Environment Variables - prefer new container.env, fallback to legacy config.env */}
+      {(() => {
+        const envVars = mcpServer.spec.container?.env || mcpServer.spec.config?.env || [];
+        return envVars.length > 0 && (
+          <Card className="md:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">
+                Environment Variables ({envVars.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="bg-muted/50 rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left p-3 font-medium text-muted-foreground">Name</th>
+                      <th className="text-left p-3 font-medium text-muted-foreground">Value</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+                  </thead>
+                  <tbody>
+                    {envVars.map((envVar, idx) => (
+                      <tr key={idx} className="border-b border-border last:border-0">
+                        <td className="p-3 font-mono text-xs">{envVar.name}</td>
+                        <td className="p-3 font-mono text-xs text-muted-foreground truncate max-w-[300px]">
+                          {envVar.value || (envVar.valueFrom ? '<from secret/configmap>' : '-')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Labels & Annotations */}
       {(mcpServer.metadata.labels || mcpServer.metadata.annotations) && (

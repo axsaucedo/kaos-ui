@@ -21,10 +21,18 @@ tests/
 ├── smoke/
 │   ├── app-loads.spec.ts     # Basic app loading tests
 │   └── cluster-connection.spec.ts  # Cluster connectivity
-└── read/
-    ├── modelapi.spec.ts      # ModelAPI read operations
-    ├── agent.spec.ts         # Agent read operations
-    └── mcpserver.spec.ts     # MCPServer read operations
+├── read/
+│   ├── modelapi.spec.ts      # ModelAPI read operations
+│   ├── agent.spec.ts         # Agent read operations
+│   └── mcpserver.spec.ts     # MCPServer read operations
+├── crud/
+│   ├── modelapi.spec.ts      # ModelAPI create/update/delete
+│   ├── agent.spec.ts         # Agent create/update/delete
+│   └── mcpserver.spec.ts     # MCPServer create/update/delete
+└── functional/
+    ├── mcpserver-tools.spec.ts  # MCPServer tools UI testing
+    ├── agent-chat.spec.ts       # Agent chat and memory testing
+    └── modelapi-request.spec.ts # ModelAPI diagnostics testing
 ```
 
 ## Prerequisites for Running Tests
@@ -33,13 +41,13 @@ tests/
 1. **KAOS UI Development Server**
    ```bash
    npm run dev
-   # Runs at http://localhost:5173
+   # Runs at http://localhost:8081
    ```
 
 2. **KAOS Proxy** (for cluster connection)
    ```bash
    kaos ui --no-browser
-   # Runs at http://localhost:8080
+   # Runs at http://localhost:8010
    ```
 
 3. **Kubernetes Cluster** with KAOS resources
@@ -154,11 +162,32 @@ Validate list and detail pages for resources:
 
 **Run before committing changes to resource components.**
 
-### Future: CRUD Tests
-Will test full Create, Update, Delete operations:
-- Form submission and validation
-- API calls and responses
-- Success/error handling
+### CRUD Tests (`tests/crud/`)
+Test full Create, Update, Delete operations:
+- Form submission with all required fields
+- Update existing resources via edit dialog
+- Delete resources and verify removal
+- Uses `test.describe.serial()` to ensure order
+
+**Use unique names with timestamps** (e.g., `test-modelapi-${Date.now()}`).
+
+```typescript
+test.describe.serial('Create, Update, Delete ModelAPI', () => {
+  const uniqueName = `test-modelapi-${Date.now()}`;
+  
+  test('should CREATE', async ({ page }) => { /* ... */ });
+  test('should UPDATE', async ({ page }) => { /* ... */ });
+  test('should DELETE', async ({ page }) => { /* ... */ });
+});
+```
+
+### Functional Tests (`tests/functional/`)
+Test interactive features and workflows:
+- MCPServer tools: list, select, execute
+- Agent chat: send messages, view memory
+- ModelAPI: diagnostics, request testing
+
+**These may require longer timeouts** for LLM responses (up to 120s).
 
 ## Best Practices
 
@@ -185,7 +214,43 @@ await page.getByText('Overview').click();
 await page.locator('.btn-primary').click();
 ```
 
-### 3. Keep Tests Independent
+### 3. Navigate Resource Lists via Table Rows
+The UI uses tables with action buttons, not links. Navigate to detail pages by:
+```typescript
+// Click view button in table row
+const rows = page.locator('table tbody tr');
+const count = await rows.count();
+expect(count, 'Expected resources').toBeGreaterThan(0);
+
+const viewButton = rows.first().locator('button').first();
+await viewButton.click();
+await page.waitForLoadState('networkidle');
+```
+
+### 4. Detect React Crashes
+Always check for error messages after navigation:
+```typescript
+const hasError = await page.locator('text=Something went wrong').count() > 0 ||
+                 await page.locator('text=TypeError').count() > 0 ||
+                 await page.locator('text=Cannot read properties').count() > 0;
+expect(hasError, 'Page should not display error messages').toBeFalsy();
+```
+
+### 5. Don't Silently Pass When No Resources
+Fail tests when expected resources are missing:
+```typescript
+// BAD - silent pass
+if (count > 0) {
+  // test...
+} else {
+  console.log('No resources found');
+}
+
+// GOOD - explicit failure
+expect(count, 'Expected resources in namespace').toBeGreaterThan(0);
+```
+
+### 6. Keep Tests Independent
 Each test should:
 - Set up its own state
 - Not depend on other tests

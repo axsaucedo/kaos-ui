@@ -151,15 +151,15 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
                 apiBase: data.apiBase || undefined,
                 apiKey: buildApiKeySource(data),
                 configYaml: data.configYamlString ? { fromString: data.configYamlString } : undefined,
-                env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined 
               }
             : undefined,
           hostedConfig: data.mode === 'Hosted'
             ? { 
                 model: data.hostedModel, 
-                env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined 
               }
             : undefined,
+          // NEW: env vars now go in container.env (not proxyConfig.env/hostedConfig.env)
+          container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
         },
       };
 
