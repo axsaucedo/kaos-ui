@@ -22,9 +22,11 @@ export function ModelAPIOverview({ modelAPI }: ModelAPIOverviewProps) {
     }
   };
 
-  const envVars = modelAPI.spec.mode === 'Proxy' 
-    ? modelAPI.spec.proxyConfig?.env 
-    : modelAPI.spec.hostedConfig?.env;
+  // NEW: prefer container.env, fall back to legacy proxyConfig.env/hostedConfig.env
+  const envVars = modelAPI.spec.container?.env 
+    || (modelAPI.spec.mode === 'Proxy' 
+      ? modelAPI.spec.proxyConfig?.env 
+      : modelAPI.spec.hostedConfig?.env);
 
   return (
     <div className="grid gap-6 md:grid-cols-2">

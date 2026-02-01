@@ -79,6 +79,10 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
   const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
 
   const getEnvVars = () => {
+    // NEW: prefer container.env, fall back to legacy proxyConfig.env/hostedConfig.env
+    if (modelAPI.spec.container?.env) {
+      return modelAPI.spec.container.env;
+    }
     if (modelAPI.spec.mode === 'Proxy') {
       return modelAPI.spec.proxyConfig?.env || [];
     }
@@ -181,13 +185,11 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                 apiBase: data.apiBase || undefined,
                 apiKey: buildApiKeySource(data),
                 configYaml: data.configYamlString ? { fromString: data.configYamlString } : undefined,
-                env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined 
               }
             : undefined,
           hostedConfig: data.mode === 'Hosted'
             ? { 
                 model: data.hostedModel, 
-                env: k8sEnvVars.length > 0 ? k8sEnvVars : undefined 
               }
             : undefined,
           gatewayRoute: (data.gatewayTimeout || data.gatewayRetries)
@@ -196,6 +198,8 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                 retries: data.gatewayRetries || undefined,
               }
             : undefined,
+          // NEW: env vars now go in container.env
+          container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
         },
       };
 

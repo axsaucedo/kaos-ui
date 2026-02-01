@@ -41,13 +41,13 @@ tests/
 1. **KAOS UI Development Server**
    ```bash
    npm run dev
-   # Runs at http://localhost:5173
+   # Runs at http://localhost:8081
    ```
 
 2. **KAOS Proxy** (for cluster connection)
    ```bash
    kaos ui --no-browser
-   # Runs at http://localhost:8080
+   # Runs at http://localhost:8010
    ```
 
 3. **Kubernetes Cluster** with KAOS resources

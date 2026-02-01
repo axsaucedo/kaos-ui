@@ -109,6 +109,12 @@ export interface ModelAPISpec {
   hostedConfig?: HostedConfig;
   // GatewayRoute configures Gateway API routing (timeout, etc.)
   gatewayRoute?: GatewayRoute;
+  // Container provides shorthand container overrides (NEW: env moved here)
+  container?: {
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
   // PodSpec allows overriding the generated pod spec
   podSpec?: Record<string, unknown>;
 }
@@ -284,6 +290,12 @@ export interface AgentSpec {
   waitForDependencies?: boolean;
   // GatewayRoute configures Gateway API routing (timeout, etc.)
   gatewayRoute?: GatewayRoute;
+  // Container provides shorthand container overrides (NEW: env moved here from config.env)
+  container?: {
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
   // PodSpec allows overriding the generated pod spec
   podSpec?: Record<string, unknown>;
 }
