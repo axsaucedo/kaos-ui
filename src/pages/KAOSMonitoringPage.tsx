@@ -9,7 +9,8 @@ import type { Service } from '@/types/kubernetes';
 
 const MONITORING_NAMESPACE_KEY = 'kaos-monitoring-namespace';
 const DEFAULT_MONITORING_NAMESPACE = 'monitoring';
-const SIGNOZ_SERVICE_NAME = 'signoz';
+const LOCAL_PORT = 8011;
+const LOCALHOST_URL = `http://localhost:${LOCAL_PORT}`;
 
 export default function KAOSMonitoringPage() {
   const { connected, baseUrl } = useKubernetesConnection();
@@ -25,6 +26,32 @@ export default function KAOSMonitoringPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [iframeError, setIframeError] = useState(false);
+  const [portForwardActive, setPortForwardActive] = useState(false);
+  const [checkingPortForward, setCheckingPortForward] = useState(false);
+
+  // Check if localhost port-forward is accessible
+  const checkPortForward = useCallback(async () => {
+    setCheckingPortForward(true);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      
+      const response = await fetch(LOCALHOST_URL, {
+        method: 'HEAD',
+        mode: 'no-cors',
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      // no-cors mode returns opaque response, but if it doesn't throw, connection succeeded
+      setPortForwardActive(true);
+      setSignozUrl(LOCALHOST_URL);
+    } catch {
+      setPortForwardActive(false);
+    } finally {
+      setCheckingPortForward(false);
+    }
+  }, []);
 
   const fetchMonitoringService = useCallback(async () => {
     if (!connected || !baseUrl) return;
@@ -32,6 +59,9 @@ export default function KAOSMonitoringPage() {
     setLoading(true);
     setError(null);
     setIframeError(false);
+    
+    // First check if port-forward is already active
+    await checkPortForward();
     
     try {
       // Fetch services from monitoring namespace
@@ -63,19 +93,19 @@ export default function KAOSMonitoringPage() {
       
       setSignozService(signoz || null);
       
-      if (signoz) {
+      // If port-forward is active, we already set the URL
+      if (!portForwardActive && signoz) {
         // Determine the URL based on service type
-        const port = signoz.spec.ports?.[0]?.port || 3301;
-        
         if (signoz.spec.type === 'LoadBalancer' && signoz.status?.loadBalancer?.ingress?.[0]) {
           const ingress = signoz.status.loadBalancer.ingress[0];
           const host = ingress.ip || ingress.hostname;
+          const port = signoz.spec.ports?.[0]?.port || 3301;
           setSignozUrl(`http://${host}:${port}`);
         } else if (signoz.spec.type === 'NodePort' && signoz.spec.ports?.[0]?.nodePort) {
           // For NodePort, we'd need the node IP - show configuration hint
           setSignozUrl(null);
         } else {
-          // ClusterIP - not directly accessible
+          // ClusterIP - not directly accessible, need port-forward
           setSignozUrl(null);
         }
       }
@@ -84,7 +114,7 @@ export default function KAOSMonitoringPage() {
     } finally {
       setLoading(false);
     }
-  }, [connected, baseUrl, monitoringNamespace]);
+  }, [connected, baseUrl, monitoringNamespace, checkPortForward, portForwardActive]);
 
   useEffect(() => {
     fetchMonitoringService();
@@ -239,9 +269,9 @@ export default function KAOSMonitoringPage() {
               <AlertDescription className="space-y-2">
                 <p>To access SignOz, run:</p>
                 <code className="block bg-muted p-2 rounded text-xs">
-                  kubectl port-forward -n {monitoringNamespace} svc/{signozService?.metadata.name} {signozService?.spec.ports?.[0]?.port}:{signozService?.spec.ports?.[0]?.port}
+                  kubectl port-forward svc/{signozService?.metadata.name} -n {monitoringNamespace} {LOCAL_PORT}:{signozService?.spec.ports?.[0]?.port}
                 </code>
-                <p className="text-xs">Then access at: <code>http://localhost:{signozService?.spec.ports?.[0]?.port}</code></p>
+                <p className="text-xs">Then refresh this page. SignOz will be available at: <code>{LOCALHOST_URL}</code></p>
               </AlertDescription>
             </Alert>
           </CardContent>
