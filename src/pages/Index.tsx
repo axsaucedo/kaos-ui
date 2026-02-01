@@ -53,7 +53,7 @@ function IndexContent() {
       {renderContent()}
       
       {/* KAOS Monitoring is always mounted but hidden when not active to preserve iframe state */}
-      <div className={activeTab === 'kaos-monitoring' ? '' : 'hidden'}>
+      <div className={activeTab === 'kaos-monitoring' ? 'h-full w-full' : 'hidden'}>
         <KAOSMonitoringPage />
       </div>
 
