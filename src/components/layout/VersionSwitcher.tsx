@@ -105,17 +105,19 @@ export function VersionSwitcher({ collapsed = false }: VersionSwitcherProps) {
       <DropdownMenuTrigger asChild>
         <button
           className={cn(
-            'flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors',
-            'text-muted-foreground hover:text-foreground hover:bg-muted/50',
-            'focus:outline-none focus:ring-2 focus:ring-primary/20',
-            collapsed && 'justify-center w-full'
+            'flex items-center gap-2 text-xs transition-colors w-full',
+            'text-muted-foreground hover:text-foreground',
+            'focus:outline-none',
+            collapsed && 'justify-center'
           )}
-          title={`Version: ${displayVersion}`}
+          title={`Current version: ${displayVersion}`}
         >
           <Tag className="h-3.5 w-3.5 flex-shrink-0" />
           {!collapsed && (
             <>
-              <span className="flex-1 text-left font-mono">{displayVersion}</span>
+              <span className="flex-1 text-left">
+                Current version: <span className="font-mono">{displayVersion}</span>
+              </span>
               <ChevronUp className="h-3 w-3 opacity-50" />
             </>
           )}
