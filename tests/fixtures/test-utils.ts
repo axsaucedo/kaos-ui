@@ -12,6 +12,123 @@ export const TEST_CONFIG = {
 };
 
 /**
+ * Generate a unique test namespace name.
+ * Format: test-<short-hash>
+ */
+export function generateTestNamespace(): string {
+  const hash = Math.random().toString(36).substring(2, 8);
+  return `test-${hash}`;
+}
+
+/**
+ * Create a test namespace via the Kubernetes API.
+ * This creates an isolated namespace for test resources.
+ */
+export async function createTestNamespace(
+  proxyUrl: string = TEST_CONFIG.proxyUrl,
+  namespaceName?: string
+): Promise<string> {
+  const ns = namespaceName || generateTestNamespace();
+  
+  const response = await fetch(`${proxyUrl}/api/v1/namespaces`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      apiVersion: 'v1',
+      kind: 'Namespace',
+      metadata: {
+        name: ns,
+        labels: {
+          'kaos-ui-test': 'true',
+          'created-by': 'playwright',
+        },
+      },
+    }),
+  });
+
+  if (!response.ok && response.status !== 409) {
+    throw new Error(`Failed to create namespace ${ns}: ${response.status} ${response.statusText}`);
+  }
+
+  return ns;
+}
+
+/**
+ * Delete a test namespace via the Kubernetes API.
+ * This cleans up all resources in the namespace.
+ */
+export async function deleteTestNamespace(
+  namespaceName: string,
+  proxyUrl: string = TEST_CONFIG.proxyUrl
+): Promise<void> {
+  const response = await fetch(`${proxyUrl}/api/v1/namespaces/${namespaceName}`, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!response.ok && response.status !== 404) {
+    console.warn(`Failed to delete namespace ${namespaceName}: ${response.status}`);
+  }
+}
+
+/**
+ * Wait for a namespace to be ready (active).
+ */
+export async function waitForNamespaceReady(
+  namespaceName: string,
+  proxyUrl: string = TEST_CONFIG.proxyUrl,
+  timeoutMs: number = 30000
+): Promise<void> {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(`${proxyUrl}/api/v1/namespaces/${namespaceName}`);
+      if (response.ok) {
+        const ns = await response.json();
+        if (ns.status?.phase === 'Active') {
+          return;
+        }
+      }
+    } catch {
+      // Retry
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  
+  throw new Error(`Namespace ${namespaceName} not ready after ${timeoutMs}ms`);
+}
+
+/**
+ * Wait for a namespace to be fully deleted.
+ */
+export async function waitForNamespaceDeleted(
+  namespaceName: string,
+  proxyUrl: string = TEST_CONFIG.proxyUrl,
+  timeoutMs: number = 60000
+): Promise<void> {
+  const startTime = Date.now();
+  
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(`${proxyUrl}/api/v1/namespaces/${namespaceName}`);
+      if (response.status === 404) {
+        return; // Namespace deleted
+      }
+    } catch {
+      return; // Connection error likely means deleted
+    }
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  console.warn(`Namespace ${namespaceName} not deleted after ${timeoutMs}ms`);
+}
+
+/**
  * Setup connection to the Kubernetes cluster via the KAOS proxy.
  * This configures the UI to connect to the local proxy.
  */
