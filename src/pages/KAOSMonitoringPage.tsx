@@ -26,32 +26,6 @@ export default function KAOSMonitoringPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [iframeError, setIframeError] = useState(false);
-  const [portForwardActive, setPortForwardActive] = useState(false);
-  const [checkingPortForward, setCheckingPortForward] = useState(false);
-
-  // Check if localhost port-forward is accessible
-  const checkPortForward = useCallback(async () => {
-    setCheckingPortForward(true);
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
-      
-      const response = await fetch(LOCALHOST_URL, {
-        method: 'HEAD',
-        mode: 'no-cors',
-        signal: controller.signal,
-      });
-      
-      clearTimeout(timeoutId);
-      // no-cors mode returns opaque response, but if it doesn't throw, connection succeeded
-      setPortForwardActive(true);
-      setSignozUrl(LOCALHOST_URL);
-    } catch {
-      setPortForwardActive(false);
-    } finally {
-      setCheckingPortForward(false);
-    }
-  }, []);
 
   const fetchMonitoringService = useCallback(async () => {
     if (!connected || !baseUrl) return;
@@ -59,9 +33,6 @@ export default function KAOSMonitoringPage() {
     setLoading(true);
     setError(null);
     setIframeError(false);
-    
-    // First check if port-forward is already active
-    await checkPortForward();
     
     try {
       // Fetch services from monitoring namespace
@@ -83,30 +54,33 @@ export default function KAOSMonitoringPage() {
       const data = await response.json();
       const services = data.items || [];
       
-      // Find SignOz frontend service
+      // Find SignOz service - prioritize exact match "signoz", then frontend/ui variants
+      // Exclude clickhouse and other sub-services
       const signoz = services.find((svc: Service) => 
-        svc.metadata.name.includes('signoz') && 
-        (svc.metadata.name.includes('frontend') || svc.metadata.name.includes('ui'))
+        svc.metadata.name === 'signoz'
       ) || services.find((svc: Service) => 
-        svc.metadata.name.includes('signoz')
+        svc.metadata.name === 'signoz-frontend' || svc.metadata.name === 'signoz-ui'
+      ) || services.find((svc: Service) => 
+        svc.metadata.name.startsWith('signoz') && 
+        !svc.metadata.name.includes('clickhouse') &&
+        !svc.metadata.name.includes('zookeeper') &&
+        !svc.metadata.name.includes('otel') &&
+        !svc.metadata.name.includes('alertmanager')
       );
       
       setSignozService(signoz || null);
       
-      // If port-forward is active, we already set the URL
-      if (!portForwardActive && signoz) {
-        // Determine the URL based on service type
+      if (signoz) {
+        // When service exists, default to localhost port-forward URL
+        // The iframe will attempt to load it; if port-forward isn't running, show error state
         if (signoz.spec.type === 'LoadBalancer' && signoz.status?.loadBalancer?.ingress?.[0]) {
           const ingress = signoz.status.loadBalancer.ingress[0];
           const host = ingress.ip || ingress.hostname;
-          const port = signoz.spec.ports?.[0]?.port || 3301;
+          const port = signoz.spec.ports?.[0]?.port || 8080;
           setSignozUrl(`http://${host}:${port}`);
-        } else if (signoz.spec.type === 'NodePort' && signoz.spec.ports?.[0]?.nodePort) {
-          // For NodePort, we'd need the node IP - show configuration hint
-          setSignozUrl(null);
         } else {
-          // ClusterIP - not directly accessible, need port-forward
-          setSignozUrl(null);
+          // For ClusterIP/NodePort, assume user has port-forward running to localhost
+          setSignozUrl(LOCALHOST_URL);
         }
       }
     } catch (err) {
@@ -114,7 +88,7 @@ export default function KAOSMonitoringPage() {
     } finally {
       setLoading(false);
     }
-  }, [connected, baseUrl, monitoringNamespace, checkPortForward, portForwardActive]);
+  }, [connected, baseUrl, monitoringNamespace]);
 
   useEffect(() => {
     fetchMonitoringService();
