@@ -4,102 +4,70 @@ Guidelines for managing KAOS CRD type definitions in the UI.
 
 ## Overview
 
-The KAOS-UI TypeScript types in `src/types/kubernetes.ts` must stay in sync with the KAOS operator Go types in `operator/api/v1alpha1/`.
+The KAOS-UI TypeScript types in `src/types/kubernetes.ts` must stay in sync with the KAOS operator Go types.
 
-## Type Locations
-
-| Resource | UI Types | Operator Types |
-|----------|----------|----------------|
-| ModelAPI | `src/types/kubernetes.ts` | `../kaos/operator/api/v1alpha1/modelapi_types.go` |
-| MCPServer | `src/types/kubernetes.ts` | `../kaos/operator/api/v1alpha1/mcpserver_types.go` |
-| Agent | `src/types/kubernetes.ts` | `../kaos/operator/api/v1alpha1/agent_types.go` |
-
-## Syncing Types
-
-When the operator types change, update the UI types:
-
-### 1. Check Operator Changes
-```bash
-# From kaos-ui directory
-cat ../kaos/operator/api/v1alpha1/modelapi_types.go | grep -A 20 "type.*Spec struct"
-```
-
-### 2. Update TypeScript Types
-Edit `src/types/kubernetes.ts` to match the Go structs.
-
-### 3. Go to TypeScript Mapping
-
-| Go Type | TypeScript Type |
-|---------|-----------------|
-| `string` | `string` |
-| `[]string` | `string[]` |
-| `*string` | `string \| undefined` or optional field |
-| `map[string]string` | `Record<string, string>` |
-| `bool` | `boolean` |
-| `int32` | `number` |
-| `struct { ... }` | `interface { ... }` |
-| `*SomeType` | `SomeType \| undefined` or `SomeType?` |
-
-## Current Type Definitions
+## Current CRD Structure (v1alpha1)
 
 ### ModelAPI
 
 ```typescript
-// Mode enum
-export type ModelAPIMode = 'Proxy' | 'Hosted';
-
-// ProxyConfig - for external LLM providers
-export interface ProxyConfig {
-  // Models is the list of model identifiers (e.g., ["openai/gpt-5-mini"])
-  models: string[];
-  // Provider is the LiteLLM provider prefix (e.g., "openai", "anthropic", "ollama")
-  provider?: string;
-  // APIBase is the backend LLM API URL
-  apiBase?: string;
-  // APIKey for authentication
-  apiKey?: ApiKeySource;
-  // ConfigYaml for advanced LiteLLM configuration
-  configYaml?: ConfigYamlSource;
-  // Env variables for the proxy container
-  env?: EnvVar[];
-}
-
-// HostedConfig - for local Ollama deployment
-export interface HostedConfig {
-  // Model is the single Ollama model to run
-  model: string;
-  // Env variables for Ollama
-  env?: EnvVar[];
-}
-
-export interface ModelAPISpec {
-  mode: ModelAPIMode;
-  proxyConfig?: ProxyConfig;
-  hostedConfig?: HostedConfig;
+interface ModelAPISpec {
+  mode: 'Proxy' | 'Hosted';
+  
+  // Proxy mode (LiteLLM)
+  proxyConfig?: {
+    models: string[];          // REQUIRED: ["openai/gpt-4o", "*", "openai/*"]
+    provider?: string;         // LiteLLM provider prefix
+    apiBase?: string;          // Backend LLM URL
+    apiKey?: ApiKeySource;     // API key for authentication
+    configYaml?: ConfigYamlSource; // Advanced LiteLLM config
+    env?: EnvVar[];            // DEPRECATED
+  };
+  
+  // Hosted mode (Ollama)
+  hostedConfig?: {
+    model: string;             // Ollama model to run
+    env?: EnvVar[];            // DEPRECATED
+  };
+  
+  // Common
+  container?: {                // NEW: container overrides
+    image?: string;
+    env?: EnvVar[];            // Use this for env vars
+    resources?: Record<string, unknown>;
+  };
   gatewayRoute?: GatewayRoute;
   podSpec?: Record<string, unknown>;
 }
+
+interface ModelAPIStatus {
+  phase?: string;              // Pending, Ready, Failed
+  ready?: boolean;
+  endpoint?: string;
+  message?: string;
+  supportedModels?: string[];  // Models this API supports
+  deployment?: DeploymentStatusInfo;
+}
 ```
-
-### Key Differences: Proxy vs Hosted
-
-| Aspect | Proxy Mode | Hosted Mode |
-|--------|------------|-------------|
-| Models | `models: string[]` (multiple) | `model: string` (single) |
-| Provider | `provider?: string` | N/A |
-| Use Case | External LLM APIs | Local Ollama |
 
 ### MCPServer
 
-**Note:** The MCPServer CRD was updated to use a new `runtime`/`params` pattern instead of `type`/`config.tools`. The UI supports both formats for backward compatibility.
-
 ```typescript
-export interface MCPServerSpec {
-  // New CRD format (v1alpha1 updated)
-  runtime?: string;              // e.g., "python-string", "kubernetes", "custom"
-  params?: string;               // Runtime-specific config (YAML string)
-  serviceAccountName?: string;   // For RBAC
-  container?: {
+interface MCPServerSpec {
+  // New format (preferred)
+  runtime?: string;            // "python-string", "kubernetes", "custom"
+  params?: string;             // Runtime-specific YAML config
+  serviceAccountName?: string; // For RBAC
+  
+  // Legacy format (backward compatible)
+  type?: 'python-runtime' | 'node-runtime';
+  config?: {
+    tools?: MCPToolsConfig;
+    env?: EnvVar[];            // DEPRECATED
+  };
+  
+  // Common
+  container?: {                // NEW: container overrides
     image?: string;
     env?: EnvVar[];
     resources?: Record<string, unknown>;
@@ -108,135 +76,171 @@ export interface MCPServerSpec {
     enabled?: boolean;
     endpoint?: string;
   };
-  
-  // Legacy CRD format (for backward compatibility)
-  type?: 'python-runtime' | 'node-runtime';
-  config?: MCPServerConfig;
-  
-  // Common fields
   gatewayRoute?: GatewayRoute;
   podSpec?: Record<string, unknown>;
 }
 
-export interface MCPServerConfig {
-  tools?: MCPToolsConfig;
-  env?: EnvVar[];
-}
-
-export interface MCPToolsConfig {
-  fromPackage?: string;     // uvx package (e.g., "mcp-server-calculator")
-  fromString?: string;      // Inline Python code
-  fromSecretKeyRef?: { name: string; key: string; };
+interface MCPServerStatus {
+  phase?: string;
+  ready?: boolean;
+  endpoint?: string;
+  availableTools?: string[];
+  message?: string;
+  deployment?: DeploymentStatusInfo;
 }
 ```
 
 ### Agent
 
 ```typescript
-export interface AgentSpec {
-  modelAPI: string;           // Reference to ModelAPI name
-  model: string;              // Model identifier
-  mcpServers?: string[];      // References to MCPServer names
+interface AgentSpec {
+  modelAPI: string;            // REQUIRED: Reference to ModelAPI
+  model: string;               // REQUIRED: Model identifier
+  mcpServers?: string[];
+  config?: {
+    description?: string;
+    instructions?: string;
+    reasoningLoopMaxSteps?: number; // 1-20, default 5
+    memory?: AgentMemoryConfig;
+    env?: EnvVar[];            // DEPRECATED
+  };
   agentNetwork?: AgentNetworkConfig;
-  config?: AgentConfig;
+  container?: {                // NEW: container overrides
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
   waitForDependencies?: boolean;
   gatewayRoute?: GatewayRoute;
   podSpec?: Record<string, unknown>;
 }
 
-export interface AgentConfig {
-  description?: string;
-  instructions?: string;
-  reasoningLoopMaxSteps?: number;
-  memory?: AgentMemoryConfig;
-  env?: EnvVar[];
+interface AgentMemoryConfig {
+  enabled?: boolean;           // Default: true
+  type?: 'local';              // Only local supported
+  contextLimit?: number;       // Default: 6
+  maxSessions?: number;        // Default: 1000
+  maxSessionEvents?: number;   // Default: 500
+}
+
+interface AgentStatus {
+  phase?: string;              // Pending, Ready, Failed, Waiting
+  ready?: boolean;
+  endpoint?: string;
+  model?: string;              // Model being used
+  linkedResources?: Record<string, string>;
+  message?: string;
+  deployment?: DeploymentStatusInfo;
 }
 ```
 
-## Common Patterns
+## Common Types
 
 ### ApiKeySource
-Used for sensitive values that can come from different sources:
+
+API keys support direct values or secret references:
+
 ```typescript
-export interface ApiKeySource {
-  value?: string;  // Direct value (not recommended for production)
+interface ApiKeySource {
+  value?: string;              // Direct value (NOT for production)
   valueFrom?: {
-    secretKeyRef?: { name: string; key: string; };
-    configMapKeyRef?: { name: string; key: string; };
+    secretKeyRef?: {
+      name: string;
+      key: string;
+    };
+    // Note: configMapKeyRef removed - secrets only
   };
 }
 ```
 
 ### EnvVar
+
 Standard Kubernetes environment variable pattern:
+
 ```typescript
-export interface EnvVar {
+interface EnvVar {
   name: string;
   value?: string;
   valueFrom?: {
-    secretKeyRef?: { name: string; key: string; };
-    configMapKeyRef?: { name: string; key: string; };
+    secretKeyRef?: { name: string; key: string };
+    configMapKeyRef?: { name: string; key: string };
   };
 }
 ```
 
-### GatewayRoute
-Common gateway configuration:
+### DeploymentStatusInfo
+
+For rolling update visibility:
+
 ```typescript
-export interface GatewayRoute {
-  timeout?: string;   // e.g., "30s", "5m"
-  retries?: number;
+interface DeploymentStatusInfo {
+  replicas?: number;
+  readyReplicas?: number;
+  availableReplicas?: number;
+  updatedReplicas?: number;
+  conditions?: {
+    type: string;
+    status: string;
+    reason?: string;
+    message?: string;
+  }[];
 }
 ```
 
+## Type Mapping: Go → TypeScript
+
+| Go Type | TypeScript Type |
+|---------|-----------------|
+| `string` | `string` |
+| `[]string` | `string[]` |
+| `*string` | `string \| undefined` or optional |
+| `map[string]string` | `Record<string, string>` |
+| `bool` | `boolean` |
+| `int32` | `number` |
+| `struct { ... }` | `interface { ... }` |
+| `*SomeType` | `SomeType?` |
+
 ## Adding New Fields
 
-When the operator adds a new field:
+1. **Update TypeScript interface** in `src/types/kubernetes.ts`
+2. **Update Overview component** to display the field
+3. **Update Create/Edit dialogs** if field is editable
+4. **Add tests** for the new field
 
-1. **Add to TypeScript interface**
-   ```typescript
-   export interface ProxyConfig {
-     // ... existing fields
-     newField?: string;  // Add new field
-   }
-   ```
+Example:
 
-2. **Update UI components to display it**
-   ```tsx
-   // In ModelAPIOverview.tsx
-   {modelAPI.spec.proxyConfig?.newField && (
-     <div>
-       <span className="text-muted-foreground">New Field</span>
-       <code>{modelAPI.spec.proxyConfig.newField}</code>
-     </div>
-   )}
-   ```
+```typescript
+// 1. Add to type
+interface ProxyConfig {
+  models: string[];
+  provider?: string;  // NEW FIELD
+  // ...
+}
 
-3. **Update forms if the field is editable**
+// 2. Display in Overview
+{modelAPI.spec.proxyConfig?.provider && (
+  <InfoRow label="Provider" value={modelAPI.spec.proxyConfig.provider} />
+)}
 
-4. **Add tests for the new field**
+// 3. Add to form
+<Input
+  {...register('provider')}
+  placeholder="e.g., openai"
+/>
+```
+
+## Breaking Changes (Alpha)
+
+The project is in alpha, so breaking changes are permitted:
+
+- `config.env` → `container.env` for all CRDs
+- `proxyConfig.model` → `proxyConfig.models` (array)
+- `apiKeySource.valueFrom.configMapKeyRef` → removed (secrets only)
+- `spec.model` added as required field on Agent
 
 ## Validation
 
-### Type Checking
 ```bash
-npm run build  # Will catch type errors
-```
-
-### Visual Verification
-1. Run `npm run dev`
-2. Connect to a cluster with the new fields
-3. Verify the UI displays them correctly
-
-## Reference: Operator Type Files
-
-```bash
-# View operator types
-ls ../kaos/operator/api/v1alpha1/
-
-# Key files:
-# - modelapi_types.go    - ModelAPI CRD
-# - mcpserver_types.go   - MCPServer CRD
-# - agent_types.go       - Agent CRD
-# - common_types.go      - Shared types (EnvVar, etc.)
+npm run build   # Catches type errors
+npm run dev     # Visual verification
 ```

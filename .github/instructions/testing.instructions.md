@@ -2,42 +2,40 @@
 
 Instructions for writing and running tests in KAOS-UI.
 
-## Testing Framework
+## Testing Stack
 
-KAOS-UI uses **Playwright** for end-to-end testing.
+- **Playwright** for end-to-end testing
+- Tests run against a real Kubernetes cluster via the KAOS proxy
 
-### Why Playwright?
-- Cross-browser testing (Chromium, Firefox, WebKit)
-- Built-in auto-waiting and assertions
-- Excellent TypeScript support
-- Visual debugging tools
-
-## Test Directory Structure
+## Directory Structure
 
 ```
 tests/
 ├── fixtures/
-│   └── test-utils.ts         # Base fixtures and helpers
+│   └── test-utils.ts           # Shared helpers and fixtures
 ├── smoke/
-│   ├── app-loads.spec.ts     # Basic app loading tests
+│   ├── app-loads.spec.ts       # Basic app loading
 │   └── cluster-connection.spec.ts  # Cluster connectivity
 ├── read/
-│   ├── modelapi.spec.ts      # ModelAPI read operations
-│   ├── agent.spec.ts         # Agent read operations
-│   └── mcpserver.spec.ts     # MCPServer read operations
+│   ├── modelapi.spec.ts        # ModelAPI list/detail
+│   ├── agent.spec.ts           # Agent list/detail
+│   └── mcpserver.spec.ts       # MCPServer list/detail
 ├── crud/
-│   ├── modelapi.spec.ts      # ModelAPI create/update/delete
-│   ├── agent.spec.ts         # Agent create/update/delete
-│   └── mcpserver.spec.ts     # MCPServer create/update/delete
-└── functional/
-    ├── mcpserver-tools.spec.ts  # MCPServer tools UI testing
-    ├── agent-chat.spec.ts       # Agent chat and memory testing
-    └── modelapi-request.spec.ts # ModelAPI diagnostics testing
+│   ├── modelapi.spec.ts        # ModelAPI create/update/delete
+│   ├── agent.spec.ts           # Agent create/update/delete
+│   └── mcpserver.spec.ts       # MCPServer create/update/delete
+├── functional/
+│   ├── agent-chat.spec.ts      # Agent chat and memory
+│   ├── mcpserver-tools.spec.ts # MCP tools UI
+│   └── modelapi-request.spec.ts # ModelAPI diagnostics
+└── integration/
+    └── full-lifecycle.spec.ts  # End-to-end workflows
 ```
 
-## Prerequisites for Running Tests
+## Prerequisites
 
 ### Required Services
+
 1. **KAOS UI Development Server**
    ```bash
    npm run dev
@@ -50,11 +48,23 @@ tests/
    # Runs at http://localhost:8010
    ```
 
-3. **Kubernetes Cluster** with KAOS resources
-   - Tests use the `kaos-hierarchy` namespace
-   - Requires existing ModelAPIs, Agents, and MCPServers
+3. **Kubernetes Cluster** with KAOS CRDs installed
+   - Tests use the `kaos-hierarchy` namespace by default
+   - Requires existing resources for read tests
 
-### Running Tests
+### Configuration
+
+Tests use configuration from `tests/fixtures/test-utils.ts`:
+
+```typescript
+export const TEST_CONFIG = {
+  proxyUrl: 'http://localhost:8010',
+  namespace: 'kaos-hierarchy',
+  baseUrl: 'http://localhost:8081',
+};
+```
+
+## Running Tests
 
 ```bash
 # Run all tests
@@ -63,252 +73,196 @@ npm run test:e2e
 # Run specific test file
 npm run test:e2e -- tests/smoke/app-loads.spec.ts
 
-# Run tests in headed mode (visible browser)
+# Run specific test category
+npm run test:e2e -- tests/crud/
+
+# Run in headed mode (visible browser)
 npm run test:e2e -- --headed
 
-# Run tests with UI mode
+# Run with UI mode (interactive)
 npm run test:e2e:ui
+
+# Run specific test by name
+npm run test:e2e -- -g "should CREATE"
 ```
 
 ## Writing Tests
 
-### Test File Structure
+### Basic Structure
 
 ```typescript
 import { test, expect } from '@playwright/test';
-import { setupConnection } from '../fixtures/test-utils';
+import { setupConnection, TEST_CONFIG } from '../fixtures/test-utils';
 
 test.describe('Feature Name', () => {
   test.beforeEach(async ({ page }) => {
     await setupConnection(page, {
-      proxyUrl: 'http://localhost:8080',
-      namespace: 'kaos-hierarchy',
+      proxyUrl: TEST_CONFIG.proxyUrl,
+      namespace: TEST_CONFIG.namespace,
     });
   });
 
   test('should do something', async ({ page }) => {
-    // Test implementation
+    // Navigate
+    await page.getByRole('button', { name: /agents/i }).click();
+    await page.waitForLoadState('networkidle');
+
+    // Assert
+    await expect(page.getByText('Agent List')).toBeVisible();
   });
 });
 ```
 
-### Using Test Fixtures
-
-The `test-utils.ts` provides common helpers:
+### CRUD Test Pattern
 
 ```typescript
-import { 
-  setupConnection,
-  waitForResourceList,
-  navigateToResource,
-} from '../fixtures/test-utils';
-
-// Setup cluster connection
-await setupConnection(page, { namespace: 'kaos-hierarchy' });
-
-// Wait for resources to load
-await waitForResourceList(page, 'agents');
-
-// Navigate to a specific resource
-await navigateToResource(page, 'modelapi', 'my-model-api');
-```
-
-### Common Assertions
-
-```typescript
-// Check element is visible
-await expect(page.getByText('Agent List')).toBeVisible();
-
-// Check element count
-await expect(page.getByTestId('agent-card')).toHaveCount(3);
-
-// Check URL
-await expect(page).toHaveURL(/\/agents\/kaos-hierarchy\/my-agent/);
-
-// Check text content
-await expect(page.getByRole('heading')).toContainText('Overview');
-```
-
-### Waiting for Dynamic Content
-
-```typescript
-// Wait for network to be idle
-await page.waitForLoadState('networkidle');
-
-// Wait for specific element
-await page.waitForSelector('[data-testid="resource-list"]');
-
-// Wait for API response
-await page.waitForResponse(resp => 
-  resp.url().includes('/apis/kaos.io/v1alpha1') && resp.status() === 200
-);
-```
-
-## Test Categories
-
-### Smoke Tests (`tests/smoke/`)
-Quick validation that core functionality works:
-- App loads without errors
-- Can connect to cluster
-- Basic navigation works
-
-**Run frequently during development.**
-
-### Read Tests (`tests/read/`)
-Validate list and detail pages for resources:
-- Resource list loads with correct items
-- Detail page displays correct information
-- Tabs and navigation work correctly
-
-**Run before committing changes to resource components.**
-
-### CRUD Tests (`tests/crud/`)
-Test full Create, Update, Delete operations:
-- Form submission with all required fields
-- Update existing resources via edit dialog
-- Delete resources and verify removal
-- Uses `test.describe.serial()` to ensure order
-
-**Use unique names with timestamps** (e.g., `test-modelapi-${Date.now()}`).
-
-```typescript
-test.describe.serial('Create, Update, Delete ModelAPI', () => {
-  const uniqueName = `test-modelapi-${Date.now()}`;
+test.describe.serial('Create, Update, Delete Agent', () => {
+  const TEST_NAME = `test-agent-${Date.now()}`;
   
-  test('should CREATE', async ({ page }) => { /* ... */ });
-  test('should UPDATE', async ({ page }) => { /* ... */ });
-  test('should DELETE', async ({ page }) => { /* ... */ });
+  test('should CREATE', async ({ page }) => {
+    await page.getByRole('button', { name: /agents/i }).click();
+    await page.getByRole('button', { name: /create agent/i }).click();
+    
+    const dialog = page.locator('[role="dialog"]');
+    await dialog.getByLabel(/name/i).fill(TEST_NAME);
+    await dialog.getByLabel(/model/i).fill('gpt-4o-mini');
+    
+    // Select ModelAPI
+    await dialog.locator('button:has-text("Select a Model API")').click();
+    await page.getByRole('option').first().click();
+    
+    await page.getByRole('button', { name: 'Create Agent' }).click();
+    await page.waitForTimeout(2000);
+    
+    await expect(page.locator('body')).toContainText(TEST_NAME);
+  });
+
+  test('should UPDATE', async ({ page }) => {
+    await page.getByRole('button', { name: /agents/i }).click();
+    const row = page.locator('table tbody tr').filter({ hasText: TEST_NAME });
+    await row.locator('button').nth(1).click(); // Edit button
+    
+    await page.getByLabel(/instructions/i).fill('Updated instructions');
+    await page.getByRole('button', { name: /update/i }).click();
+  });
+
+  test('should DELETE', async ({ page }) => {
+    await page.getByRole('button', { name: /agents/i }).click();
+    const row = page.locator('table tbody tr').filter({ hasText: TEST_NAME });
+    await row.locator('button').nth(2).click(); // Delete button
+    
+    await page.getByRole('button', { name: /confirm|delete/i }).click();
+    await page.waitForTimeout(2000);
+    
+    await expect(row).not.toBeVisible();
+  });
 });
 ```
 
-### Functional Tests (`tests/functional/`)
-Test interactive features and workflows:
-- MCPServer tools: list, select, execute
-- Agent chat: send messages, view memory
-- ModelAPI: diagnostics, request testing
-
-**These may require longer timeouts** for LLM responses (up to 120s).
-
 ## Best Practices
 
-### 1. Use Data-TestId Selectors
-Add `data-testid` attributes to important elements:
-```tsx
-<Card data-testid="agent-card">
-  <CardTitle data-testid="agent-name">{agent.metadata.name}</CardTitle>
-</Card>
-```
+### 1. Use Semantic Selectors
 
 ```typescript
-// In tests
-await page.getByTestId('agent-card').click();
-```
-
-### 2. Prefer Role and Text Selectors
-```typescript
-// Good - semantic selectors
+// Good - semantic
 await page.getByRole('button', { name: 'Save' }).click();
+await page.getByLabel('Model').fill('gpt-4');
 await page.getByText('Overview').click();
 
-// Avoid - fragile CSS selectors
+// Avoid - fragile
 await page.locator('.btn-primary').click();
+await page.locator('#input-3').fill('gpt-4');
 ```
 
-### 3. Navigate Resource Lists via Table Rows
-The UI uses tables with action buttons, not links. Navigate to detail pages by:
-```typescript
-// Click view button in table row
-const rows = page.locator('table tbody tr');
-const count = await rows.count();
-expect(count, 'Expected resources').toBeGreaterThan(0);
+### 2. Add data-testid for Complex Elements
 
-const viewButton = rows.first().locator('button').first();
-await viewButton.click();
+```tsx
+// In component
+<Card data-testid={`agent-card-${agent.metadata.name}`}>
+
+// In test
+await page.getByTestId('agent-card-my-agent').click();
+```
+
+### 3. Wait Properly
+
+```typescript
+// Wait for network
 await page.waitForLoadState('networkidle');
+
+// Wait for element
+await expect(page.getByText('Success')).toBeVisible();
+
+// Wait for dialog
+await page.waitForSelector('[role="dialog"]');
 ```
 
-### 4. Detect React Crashes
-Always check for error messages after navigation:
+### 4. Check for Errors
+
 ```typescript
+// After navigation
 const hasError = await page.locator('text=Something went wrong').count() > 0 ||
-                 await page.locator('text=TypeError').count() > 0 ||
-                 await page.locator('text=Cannot read properties').count() > 0;
-expect(hasError, 'Page should not display error messages').toBeFalsy();
+                 await page.locator('text=TypeError').count() > 0;
+expect(hasError, 'Page should not show errors').toBeFalsy();
 ```
 
-### 5. Don't Silently Pass When No Resources
-Fail tests when expected resources are missing:
+### 5. Use Unique Resource Names
+
 ```typescript
-// BAD - silent pass
-if (count > 0) {
-  // test...
-} else {
-  console.log('No resources found');
+const TEST_NAME = `test-modelapi-${Date.now()}`;
+```
+
+### 6. Handle Missing Resources Gracefully
+
+```typescript
+const rowCount = await testRow.count();
+if (rowCount === 0) {
+  console.log('Resource not found, skipping');
+  test.skip();
+  return;
 }
-
-// GOOD - explicit failure
-expect(count, 'Expected resources in namespace').toBeGreaterThan(0);
 ```
 
-### 6. Keep Tests Independent
-Each test should:
-- Set up its own state
-- Not depend on other tests
-- Clean up if it creates resources
+## Debugging
 
-### 4. Handle Async Operations
-```typescript
-// Wait for navigation
-await Promise.all([
-  page.waitForURL(/\/agents\//),
-  page.getByTestId('agent-link').click(),
-]);
+### Headed Mode
 
-// Wait for data to load
-await expect(page.getByTestId('loading')).not.toBeVisible();
-await expect(page.getByTestId('agent-list')).toBeVisible();
-```
-
-### 5. Use Descriptive Test Names
-```typescript
-// Good
-test('should display all agents in the kaos-hierarchy namespace', ...);
-test('should show agent details including model and MCPServers', ...);
-
-// Avoid
-test('agents work', ...);
-test('test1', ...);
-```
-
-## Debugging Tests
-
-### Visual Mode
 ```bash
 npm run test:e2e -- --headed --debug
 ```
 
 ### Trace Viewer
+
 ```bash
 npm run test:e2e -- --trace on
 npx playwright show-trace trace.zip
 ```
 
-### Screenshots on Failure
-Configured automatically in `playwright.config.ts`.
+### Screenshots
 
-## CI/CD Integration
+Auto-captured on failure. Location: `test-results/`
 
-Tests run automatically on:
-- Pull requests
-- Push to main branch
+### Console Output
 
-See `.github/workflows/` for CI configuration.
+```typescript
+page.on('console', msg => console.log(msg.text()));
+```
 
-## Adding New Tests
+## Test Categories
 
-1. Determine test category (smoke, read, etc.)
-2. Create test file in appropriate directory
-3. Import fixtures from `test-utils.ts`
-4. Follow existing test patterns
-5. Run locally to verify
-6. Commit with descriptive message
+| Category | Purpose | When to Run |
+|----------|---------|-------------|
+| smoke | Basic validation | Every commit |
+| read | List/detail pages | When modifying display |
+| crud | Create/Update/Delete | When modifying forms |
+| functional | Feature workflows | When modifying features |
+| integration | End-to-end flows | Before release |
+
+## CI/CD
+
+Tests run on:
+- Pull requests to main
+- Pushes to main branch
+- Release tags
+
+See `.github/workflows/` for configuration.

@@ -15,7 +15,6 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { Badge } from '@/components/ui/badge';
-import { VersionSwitcher } from './VersionSwitcher';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -192,10 +191,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </nav>
 
       {/* Footer */}
-      <div className="p-3 border-t border-sidebar-border space-y-2">
-        {/* Version Switcher */}
-        <VersionSwitcher collapsed={collapsed} />
-        
+      <div className="p-3 border-t border-sidebar-border">
         {/* Connection Status */}
         <div className={cn(
           'flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30',

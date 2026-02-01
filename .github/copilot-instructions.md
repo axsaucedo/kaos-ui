@@ -1,86 +1,68 @@
 # KAOS-UI Copilot Instructions
 
-This document provides context for GitHub Copilot when working with the KAOS-UI codebase.
+Context and guidelines for GitHub Copilot and AI coding assistants working with the KAOS-UI codebase.
 
 ## Project Overview
 
 **KAOS-UI** is a React-based web dashboard for the Kubernetes Agent Orchestration System (KAOS). It provides real-time visibility and management of AI agents, MCP servers, and Model APIs running on Kubernetes.
 
-### Key Technologies
-- **React 18** with TypeScript
-- **Vite** for build tooling
-- **Tailwind CSS** with shadcn/ui components
-- **Zustand** for state management
-- **TanStack Query** for data fetching
-- **React Router** for navigation
-- **Playwright** for end-to-end testing
+### Technology Stack
+
+| Technology | Purpose |
+|------------|---------|
+| React 18 | UI framework |
+| TypeScript | Type safety |
+| Vite | Build tooling |
+| Tailwind CSS | Styling |
+| shadcn/ui | Component library |
+| Zustand | State management |
+| TanStack Query | Server state caching |
+| React Router | Client-side routing |
+| Playwright | End-to-end testing |
 
 ## Architecture
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│   Browser   │────▶│  CORS Proxy  │────▶│  Kubernetes API │
-│  (KAOS UI)  │     │  (localhost) │     │    (cluster)    │
+│   Browser   │────▶│  KAOS Proxy  │────▶│  Kubernetes API │
+│  (KAOS UI)  │     │  (kaos ui)   │     │    (cluster)    │
 └─────────────┘     └──────────────┘     └─────────────────┘
 ```
 
-The UI is a static web application that connects to Kubernetes via a local CORS proxy started by `kaos ui --no-browser`.
+The UI is a static SPA that connects to Kubernetes via a CORS proxy (`kaos ui --no-browser`).
 
 ## Directory Structure
 
 ```
 src/
 ├── components/          # React components
-│   ├── agent/          # Agent-specific components
-│   ├── mcp/            # MCP Server components
-│   ├── modelapi/       # Model API components
-│   ├── dashboard/      # Dashboard widgets
-│   ├── layout/         # Layout components (sidebar, header)
-│   ├── settings/       # Settings components
-│   ├── shared/         # Shared/reusable components
-│   └── ui/             # shadcn/ui base components
-├── contexts/           # React contexts
-├── hooks/              # Custom React hooks
-├── lib/                # Utility libraries
-│   ├── kubernetes-client.ts  # K8s API client
-│   └── utils.ts        # General utilities
-├── pages/              # Route page components
-├── stores/             # Zustand stores
-└── types/              # TypeScript type definitions
-    ├── kubernetes.ts   # KAOS CRD types (Agent, MCPServer, ModelAPI)
-    └── mcp.ts          # MCP protocol types
+│   ├── agent/           # Agent-specific (Chat, Memory, Overview, Pods)
+│   ├── mcp/             # MCPServer components (Overview, Pods, ToolsDebug)
+│   ├── modelapi/        # ModelAPI components (Overview, Pods, Diagnostics)
+│   ├── dashboard/       # Dashboard widgets (OverviewDashboard)
+│   ├── kubernetes/      # K8s resources (PodsList, SecretsList, DeploymentsList)
+│   ├── layout/          # Layout (MainLayout, Sidebar, Header, ConnectionStatus)
+│   ├── resources/       # Resource CRUD (List, CreateDialog, EditDialog, DetailDrawer)
+│   │   └── shared/      # Shared editors (EnvVarEditor, LabelsAnnotationsEditor)
+│   ├── settings/        # Settings (ConnectionSettings, AppearanceSettings)
+│   ├── shared/          # Reusable (DeploymentStatusCard, YamlViewer)
+│   └── ui/              # shadcn/ui base components (do NOT modify directly)
+├── contexts/            # React contexts (KubernetesConnectionContext)
+├── hooks/               # Custom hooks (useAgentChat, useRealKubernetesAPI)
+├── lib/                 # Utilities
+│   ├── kubernetes-client.ts  # K8s API client with CRD CRUD
+│   └── utils.ts              # General utilities
+├── pages/               # Route pages (Index, AgentDetail, etc.)
+├── stores/              # Zustand stores (kubernetesStore)
+└── types/               # TypeScript types
+    ├── kubernetes.ts    # KAOS CRD types (Agent, MCPServer, ModelAPI)
+    └── mcp.ts           # MCP protocol types
 ```
 
-## Running Locally
-
-### Development Server
-```bash
-npm install
-npm run dev
-# Opens at http://localhost:5173
-```
-
-### Connecting to a Cluster
-1. Start the KAOS proxy (handles CORS):
-   ```bash
-   kaos ui --no-browser
-   # Starts proxy at http://localhost:8080
-   ```
-2. Open the UI and configure connection in Settings > Connectivity
-3. Enter proxy URL: `http://localhost:8080`
-4. Select your namespace
-
-### Building
-```bash
-npm run build      # Production build
-npm run build:dev  # Development build with source maps
-```
-
-## KAOS Custom Resources
-
-The UI manages three Kubernetes Custom Resources:
+## KAOS Custom Resources (CRDs)
 
 ### 1. ModelAPI
+
 Provides LLM API endpoints. Two modes:
 - **Proxy**: Routes to external LLM providers via LiteLLM
 - **Hosted**: Runs Ollama locally in the cluster
@@ -89,102 +71,283 @@ Provides LLM API endpoints. Two modes:
 interface ModelAPISpec {
   mode: 'Proxy' | 'Hosted';
   proxyConfig?: {
-    models: string[];      // List of supported models
-    provider?: string;     // LiteLLM provider prefix
-    apiBase?: string;
-    apiKey?: ApiKeySource;
+    models: string[];           // REQUIRED: e.g., ["openai/gpt-4o", "*"]
+    provider?: string;          // LiteLLM provider prefix
+    apiBase?: string;           // Backend URL
+    apiKey?: ApiKeySource;      // API key (value or secretKeyRef)
+    configYaml?: ConfigYamlSource;
+    env?: EnvVar[];             // DEPRECATED: use container.env
   };
   hostedConfig?: {
-    model: string;         // Single Ollama model
+    model: string;              // Single Ollama model
+    env?: EnvVar[];             // DEPRECATED: use container.env
   };
+  container?: {                 // NEW: container overrides
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
+  gatewayRoute?: GatewayRoute;
+  podSpec?: Record<string, unknown>;
 }
 ```
 
 ### 2. MCPServer
+
 Model Context Protocol servers providing tools to agents.
 
 ```typescript
 interface MCPServerSpec {
-  type: 'python-runtime' | 'node-runtime';
-  config: {
-    tools?: {
-      fromPackage?: string;   // uvx package name
-      fromString?: string;    // Inline Python code
-    };
+  // New format (preferred)
+  runtime?: string;              // e.g., "python-string", "kubernetes", "custom"
+  params?: string;               // Runtime-specific config (YAML string)
+  serviceAccountName?: string;
+  container?: {
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
   };
+  telemetry?: { enabled?: boolean; endpoint?: string };
+  
+  // Legacy format (backward compatible)
+  type?: 'python-runtime' | 'node-runtime';
+  config?: {
+    tools?: { fromPackage?: string; fromString?: string; fromSecretKeyRef?: {...} };
+    env?: EnvVar[];              // DEPRECATED: use container.env
+  };
+  
+  gatewayRoute?: GatewayRoute;
+  podSpec?: Record<string, unknown>;
 }
 ```
 
 ### 3. Agent
+
 AI agents with memory, tools, and multi-agent capabilities.
 
 ```typescript
 interface AgentSpec {
-  modelAPI: string;           // Reference to ModelAPI
-  model: string;              // Model identifier
-  mcpServers?: string[];      // References to MCPServers
-  agentNetwork?: {
-    expose?: boolean;         // Enable A2A endpoint
-    access?: string[];        // Allowed peer agents
-  };
+  modelAPI: string;              // REQUIRED: Reference to ModelAPI name
+  model: string;                 // REQUIRED: Model identifier (must be supported by ModelAPI)
+  mcpServers?: string[];         // References to MCPServer names
   config?: {
     description?: string;
     instructions?: string;
+    reasoningLoopMaxSteps?: number;
+    memory?: {
+      enabled?: boolean;         // Default: true
+      type?: 'local';
+      contextLimit?: number;     // Default: 6
+      maxSessions?: number;      // Default: 1000
+      maxSessionEvents?: number; // Default: 500
+    };
+    env?: EnvVar[];              // DEPRECATED: use container.env
+  };
+  agentNetwork?: {
+    expose?: boolean;
+    access?: string[];
+  };
+  container?: {                  // NEW: container overrides
+    image?: string;
+    env?: EnvVar[];
+    resources?: Record<string, unknown>;
+  };
+  waitForDependencies?: boolean;
+  gatewayRoute?: GatewayRoute;
+  podSpec?: Record<string, unknown>;
+}
+```
+
+### Common Types
+
+```typescript
+// API key with secret reference
+interface ApiKeySource {
+  value?: string;                    // Direct value (not for production)
+  valueFrom?: {
+    secretKeyRef?: { name: string; key: string };
+  };
+}
+
+// Environment variable
+interface EnvVar {
+  name: string;
+  value?: string;
+  valueFrom?: {
+    secretKeyRef?: { name: string; key: string };
+    configMapKeyRef?: { name: string; key: string };
   };
 }
 ```
 
-## Code Style Guidelines
+## Code Patterns
 
-### Components
-- Use functional components with hooks
-- Place component-specific types in the same file
-- Use shadcn/ui components from `@/components/ui/`
-- Follow the existing pattern of Overview/Pods/Detail tabs
+### Component Structure
+
+```tsx
+// Standard component pattern
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import type { Agent } from '@/types/kubernetes';
+
+interface AgentOverviewProps {
+  agent: Agent;
+}
+
+export function AgentOverview({ agent }: AgentOverviewProps) {
+  // Component logic
+}
+```
 
 ### State Management
-- Use Zustand store (`useKubernetesStore`) for global state
-- Use React Query for server state that needs caching
-- Use local state for component-specific UI state
 
-### API Calls
-- Use `k8sClient` from `@/lib/kubernetes-client.ts`
-- Use `useRealKubernetesAPI` hook for CRUD operations
-- Handle errors gracefully with toast notifications
+```typescript
+// Zustand store access
+import { useKubernetesStore } from '@/stores/kubernetesStore';
 
-### Testing
-- Use Playwright for end-to-end tests
-- Tests are in `/tests` directory
-- Smoke tests validate basic functionality
-- Read tests validate list and detail pages
+function MyComponent() {
+  const { agents, modelAPIs, activeTab, setActiveTab } = useKubernetesStore();
+}
+
+// API operations via context
+import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
+
+function MyForm() {
+  const { createAgent, updateAgent, deleteAgent, refreshAll } = useKubernetesConnection();
+}
+```
+
+### K8s Client Usage
+
+```typescript
+import { k8sClient } from '@/lib/kubernetes-client';
+
+// Direct API calls
+const agents = await k8sClient.listAgents(namespace);
+const agent = await k8sClient.getAgent(name, namespace);
+
+// Service proxy (for chat, tools, etc.)
+const response = await k8sClient.proxyServiceRequest(
+  'agent-my-agent', '/chat/completions', { method: 'POST', body: '...' }, namespace
+);
+```
+
+### Form Patterns
+
+```typescript
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
+
+const schema = z.object({
+  name: z.string().min(1).regex(/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/),
+  model: z.string().min(1),
+});
+
+function CreateForm() {
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    resolver: zodResolver(schema),
+  });
+  
+  const onSubmit = async (data) => { /* ... */ };
+}
+```
+
+## UI Conventions
+
+### Badge Variants for Status
+
+```typescript
+const getStatusVariant = (phase?: string) => {
+  switch (phase) {
+    case 'Running':
+    case 'Ready': return 'success';
+    case 'Pending':
+    case 'Waiting': return 'warning';
+    case 'Error':
+    case 'Failed': return 'destructive';
+    default: return 'secondary';
+  }
+};
+```
+
+### Resource Color Tokens
+
+```css
+/* Defined in index.css */
+:root {
+  --agent: 142 76% 36%;    /* Green */
+  --mcp: 262 83% 58%;      /* Purple */
+  --modelapi: 45 93% 47%;  /* Yellow/Orange */
+}
+```
+
+### Data-TestId Conventions
+
+Add `data-testid` to interactive elements for Playwright tests:
+- `data-testid="create-agent-button"`
+- `data-testid="agent-list-row-{name}"`
+- `data-testid="save-button"`
+
+## Testing
+
+### Prerequisites
+
+```bash
+npm run dev              # UI at http://localhost:8081
+kaos ui --no-browser     # Proxy at http://localhost:8010
+# KIND cluster with KAOS resources in kaos-hierarchy namespace
+```
+
+### Running Tests
+
+```bash
+npm run test:e2e                     # All tests
+npm run test:e2e:ui                  # Interactive UI mode
+npm run test:e2e -- tests/crud/      # CRUD tests only
+npm run test:e2e -- --headed         # Visible browser
+```
+
+### Test Structure
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { setupConnection, TEST_CONFIG } from '../fixtures/test-utils';
+
+test.describe('Feature', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupConnection(page, {
+      proxyUrl: TEST_CONFIG.proxyUrl,
+      namespace: TEST_CONFIG.namespace,
+    });
+  });
+
+  test('should do something', async ({ page }) => {
+    await page.getByRole('button', { name: /agents/i }).click();
+    await expect(page.getByText('Agent List')).toBeVisible();
+  });
+});
+```
 
 ## Common Tasks
 
-### Adding a new field to a CRD type
+### Adding a New CRD Field
+
 1. Update type in `src/types/kubernetes.ts`
-2. Update relevant Overview component to display the field
-3. Update any forms that create/edit the resource
-4. Sync with KAOS operator types if needed
+2. Update Overview component to display field
+3. Update Create/Edit dialogs if editable
+4. Sync with KAOS operator types
 
-### Adding a new page
-1. Create page component in `src/pages/`
-2. Add route in `src/App.tsx`
-3. Add navigation link in sidebar (`src/components/layout/`)
+### Adding a New Test
 
-### Adding a new test
-1. Create test file in appropriate `/tests` subdirectory
+1. Create file in appropriate `tests/` subdirectory
 2. Use fixtures from `tests/fixtures/test-utils.ts`
-3. Follow existing test patterns
+3. Use unique names: `test-{resource}-${Date.now()}`
+4. Clean up resources after tests
 
-## Related Documentation
+## Additional Guidelines
 
-- [KAOS Operator Docs](../kaos/docs/) - Full KAOS documentation
-- [UI Overview](../kaos/docs/ui/overview.md) - UI architecture
-- [UI Features](../kaos/docs/ui/features.md) - Feature walkthrough
-
-## Additional Instructions
-
-For specific areas, see:
-- `.github/instructions/components.instructions.md` - UI component guidelines
-- `.github/instructions/testing.instructions.md` - Testing patterns
-- `.github/instructions/kubernetes-types.instructions.md` - CRD type sync
+See specific instruction files:
+- `.github/instructions/components.instructions.md` - UI patterns
+- `.github/instructions/testing.instructions.md` - Test patterns
+- `.github/instructions/kubernetes-types.instructions.md` - CRD sync

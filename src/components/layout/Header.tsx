@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { AutoRefreshControl } from './AutoRefreshControl';
 import { ConnectionStatus } from './ConnectionStatus';
+import { VersionSwitcher } from './VersionSwitcher';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { GlobalSearch } from './GlobalSearch';
 
@@ -12,6 +13,9 @@ export function Header() {
 
       {/* Right side controls */}
       <div className="flex items-center gap-3">
+        {/* Version Switcher */}
+        <VersionSwitcher />
+
         {/* Connection Status with Namespace Selector */}
         <ConnectionStatus />
 

@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 interface VersionSwitcherProps {
-  collapsed: boolean;
+  collapsed?: boolean;
 }
 
 interface VersionInfo {
@@ -50,7 +50,7 @@ function navigateToVersion(version: string) {
   }
 }
 
-export function VersionSwitcher({ collapsed }: VersionSwitcherProps) {
+export function VersionSwitcher({ collapsed = false }: VersionSwitcherProps) {
   const [versions, setVersions] = useState<string[]>([]);
   const [latestVersion, setLatestVersion] = useState<string>('');
   const [loading, setLoading] = useState(true);

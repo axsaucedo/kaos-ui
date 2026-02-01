@@ -21,6 +21,7 @@ interface DiagnosticResult {
   request: {
     model: string;
     messages: { role: string; content: string }[];
+    seed?: number;
   };
   response?: {
     status: number;
@@ -33,6 +34,7 @@ interface DiagnosticResult {
 export function ModelAPIDiagnostics({ modelAPI }: ModelAPIDiagnosticsProps) {
   const [prompt, setPrompt] = useState('Hello, can you tell me a short joke?');
   const [model, setModel] = useState('');
+  const [seed, setSeed] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<DiagnosticResult[]>([]);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
@@ -58,10 +60,20 @@ export function ModelAPIDiagnostics({ modelAPI }: ModelAPIDiagnosticsProps) {
     setIsLoading(true);
     const startTime = Date.now();
 
+    // Parse seed if provided
+    let seedNum: number | undefined;
+    if (seed.trim()) {
+      const parsed = parseInt(seed.trim(), 10);
+      if (!isNaN(parsed)) {
+        seedNum = parsed;
+      }
+    }
+
     const requestBody = {
       model: model || defaultModel,
       messages: [{ role: 'user', content: prompt }],
       max_tokens: 256,
+      ...(seedNum !== undefined && { seed: seedNum }),
     };
 
     try {
@@ -100,7 +112,7 @@ export function ModelAPIDiagnostics({ modelAPI }: ModelAPIDiagnosticsProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [prompt, model, defaultModel, serviceName, namespace]);
+  }, [prompt, model, seed, defaultModel, serviceName, namespace]);
 
   const copyResult = (index: number) => {
     const result = results[index];
@@ -139,7 +151,7 @@ export function ModelAPIDiagnostics({ modelAPI }: ModelAPIDiagnosticsProps) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="model">Model (optional)</Label>
               <Input
@@ -153,9 +165,22 @@ export function ModelAPIDiagnostics({ modelAPI }: ModelAPIDiagnosticsProps) {
               </p>
             </div>
             <div className="space-y-2">
+              <Label htmlFor="seed">Seed (optional)</Label>
+              <Input
+                id="seed"
+                type="number"
+                placeholder="e.g., 12345"
+                value={seed}
+                onChange={(e) => setSeed(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                For deterministic responses
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label>Endpoint</Label>
-              <div className="flex items-center h-10 px-3 rounded-md bg-muted text-sm font-mono">
-                {modelAPI.status?.endpoint || `http://${serviceName}.${namespace}.svc.cluster.local:8000`}
+              <div className="flex items-center h-10 px-3 rounded-md bg-muted text-sm font-mono overflow-hidden">
+                <span className="truncate">{modelAPI.status?.endpoint || `http://${serviceName}.${namespace}.svc.cluster.local:8000`}</span>
               </div>
             </div>
           </div>
