@@ -36,7 +36,7 @@ function cleanResource(obj: unknown): unknown {
   return obj;
 }
 
-// Convert resource to YAML-like format
+// Convert resource to YAML format
 function toYaml(obj: unknown, indent = 0): string {
   const spaces = '  '.repeat(indent);
   
@@ -47,11 +47,13 @@ function toYaml(obj: unknown, indent = 0): string {
   if (typeof obj === 'string') {
     // Multi-line strings
     if (obj.includes('\n')) {
-      return `|\n${obj.split('\n').map(line => spaces + '  ' + line).join('\n')}`;
+      const lines = obj.split('\n');
+      const indentedLines = lines.map(line => '  '.repeat(indent + 1) + line);
+      return '|\n' + indentedLines.join('\n');
     }
     // Strings that need quoting
-    if (obj.includes(':') || obj.includes('#') || obj.startsWith(' ') || obj.endsWith(' ') || obj === '') {
-      return `"${obj.replace(/"/g, '\\"')}"`;
+    if (obj.includes(':') || obj.includes('#') || obj.startsWith(' ') || obj.endsWith(' ') || obj === '' || obj.includes('"')) {
+      return `"${obj.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
     }
     return obj;
   }
@@ -62,14 +64,21 @@ function toYaml(obj: unknown, indent = 0): string {
   
   if (Array.isArray(obj)) {
     if (obj.length === 0) return '[]';
-    return obj.map(item => {
-      if (typeof item === 'object' && item !== null) {
-        const inner = toYaml(item, indent + 1);
-        const lines = inner.split('\n');
-        return `\n${spaces}- ${lines[0]}${lines.slice(1).map(l => '\n' + spaces + '  ' + l.trim()).join('')}`;
+    
+    const items = obj.map(item => {
+      if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+        // For object items in array, format as "- key: value" style
+        const innerYaml = toYaml(item, 0);
+        const lines = innerYaml.split('\n').filter(l => l.trim());
+        if (lines.length === 0) return `${spaces}- {}`;
+        // First line goes after the dash, rest are indented
+        const firstLine = lines[0].trim();
+        const restLines = lines.slice(1).map(l => spaces + '  ' + l.trim()).join('\n');
+        return `${spaces}- ${firstLine}${restLines ? '\n' + restLines : ''}`;
       }
-      return `\n${spaces}- ${toYaml(item, indent + 1)}`;
-    }).join('');
+      return `${spaces}- ${toYaml(item, indent + 1)}`;
+    });
+    return '\n' + items.join('\n');
   }
   
   if (typeof obj === 'object') {
@@ -78,15 +87,22 @@ function toYaml(obj: unknown, indent = 0): string {
     );
     if (entries.length === 0) return '{}';
     
-    return entries.map(([key, value]) => {
-      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-        return `${spaces}${key}:\n${toYaml(value, indent + 1)}`;
+    const lines = entries.map(([key, value]) => {
+      if (value === null || value === undefined) {
+        return `${spaces}${key}: null`;
       }
-      if (Array.isArray(value)) {
-        return `${spaces}${key}:${toYaml(value, indent + 1)}`;
+      if (typeof value === 'object' && value !== null) {
+        const inner = toYaml(value, indent + 1);
+        if (Array.isArray(value)) {
+          if (value.length === 0) return `${spaces}${key}: []`;
+          return `${spaces}${key}:${inner}`;
+        }
+        if (Object.keys(value).length === 0) return `${spaces}${key}: {}`;
+        return `${spaces}${key}:\n${inner}`;
       }
       return `${spaces}${key}: ${toYaml(value, indent)}`;
-    }).join('\n');
+    });
+    return lines.join('\n');
   }
   
   return String(obj);
@@ -125,7 +141,36 @@ function highlightYaml(yaml: string): React.ReactNode[] {
       );
     }
     
-    // Match list items
+    // Match list items with key-value after dash
+    const listKeyValueMatch = line.match(/^(\s*)(-)(\s+)([a-zA-Z0-9_-]+)(:)(.*)$/);
+    if (listKeyValueMatch) {
+      const [, indent, dash, space, key, colon, value] = listKeyValueMatch;
+      const trimmedValue = value.trim();
+      
+      let valueElement: React.ReactNode = value;
+      if (trimmedValue.startsWith('"') || trimmedValue.startsWith("'")) {
+        valueElement = <span className="text-green-500 dark:text-green-400">{value}</span>;
+      } else if (trimmedValue === 'true' || trimmedValue === 'false' || trimmedValue === 'null') {
+        valueElement = <span className="text-orange-500 dark:text-orange-400">{value}</span>;
+      } else if (/^\s*-?\d+(\.\d+)?$/.test(trimmedValue)) {
+        valueElement = <span className="text-blue-500 dark:text-blue-400">{value}</span>;
+      } else if (value) {
+        valueElement = <span className="text-foreground">{value}</span>;
+      }
+      
+      return (
+        <div key={index}>
+          {indent}
+          <span className="text-muted-foreground">{dash}</span>
+          {space}
+          <span className="text-purple-500 dark:text-purple-400">{key}</span>
+          <span className="text-muted-foreground">{colon}</span>
+          {valueElement}
+        </div>
+      );
+    }
+    
+    // Match simple list items
     const listMatch = line.match(/^(\s*)(-)(.*)$/);
     if (listMatch) {
       const [, indent, dash, rest] = listMatch;
@@ -139,7 +184,7 @@ function highlightYaml(yaml: string): React.ReactNode[] {
     }
     
     // Multi-line string content (indented text after |)
-    if (line.match(/^\s+\S/)) {
+    if (line.match(/^\s{2,}\S/)) {
       return <div key={index} className="text-green-500 dark:text-green-400">{line}</div>;
     }
     
