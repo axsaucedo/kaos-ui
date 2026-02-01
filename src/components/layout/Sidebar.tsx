@@ -10,6 +10,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Cog,
+  Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -40,6 +42,8 @@ const navItems: NavItem[] = [
 const k8sItems: NavItem[] = [
   { id: 'pods', label: 'Pods', icon: Boxes },
   { id: 'secrets', label: 'Secrets', icon: KeyRound },
+  { id: 'kaos-system', label: 'KAOS System', icon: Cog },
+  { id: 'kaos-monitoring', label: 'KAOS Monitoring', icon: Activity },
 ];
 
 const toolItems: NavItem[] = [

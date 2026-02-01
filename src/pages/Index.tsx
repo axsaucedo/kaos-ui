@@ -11,6 +11,8 @@ import { MCPServerEditDialog } from '@/components/resources/MCPServerEditDialog'
 import { PodsList } from '@/components/kubernetes/PodsList';
 import { SecretsList } from '@/components/kubernetes/SecretsList';
 import { SettingsPage } from '@/components/settings/SettingsPage';
+import KAOSSystemPage from '@/pages/KAOSSystemPage';
+import KAOSMonitoringPage from '@/pages/KAOSMonitoringPage';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import type { Agent, ModelAPI, MCPServer } from '@/types/kubernetes';
 
@@ -34,6 +36,8 @@ function IndexContent() {
       case 'agents': return <AgentList />;
       case 'pods': return <PodsList />;
       case 'secrets': return <SecretsList />;
+      case 'kaos-system': return <KAOSSystemPage />;
+      case 'kaos-monitoring': return <KAOSMonitoringPage />;
       case 'settings': return <SettingsPage />;
       default: return <OverviewDashboard />;
     }

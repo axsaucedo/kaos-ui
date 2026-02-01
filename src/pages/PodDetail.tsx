@@ -351,6 +351,64 @@ export default function PodDetail() {
               </CardContent>
             </Card>
 
+            {/* Environment Variables */}
+            <Card className="lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-base">Environment Variables</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {pod.spec.containers.map((container) => {
+                    const envVars = container.env || [];
+                    if (envVars.length === 0) return null;
+                    
+                    return (
+                      <div key={container.name} className="space-y-2">
+                        {containers.length > 1 && (
+                          <p className="text-sm font-medium text-muted-foreground">{container.name}</p>
+                        )}
+                        <div className="bg-muted/30 rounded-lg overflow-hidden">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-border">
+                                <th className="text-left p-2 font-medium text-muted-foreground w-1/3">Name</th>
+                                <th className="text-left p-2 font-medium text-muted-foreground">Value / Source</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {envVars.map((env, idx) => (
+                                <tr key={idx} className="border-b border-border/50 last:border-0">
+                                  <td className="p-2 font-mono font-medium">{env.name}</td>
+                                  <td className="p-2 font-mono text-muted-foreground break-all">
+                                    {env.value ? (
+                                      <span className="text-foreground">{env.value.length > 100 ? env.value.substring(0, 100) + '...' : env.value}</span>
+                                    ) : env.valueFrom?.secretKeyRef ? (
+                                      <Badge variant="outline" className="text-xs">
+                                        Secret: {env.valueFrom.secretKeyRef.name}/{env.valueFrom.secretKeyRef.key}
+                                      </Badge>
+                                    ) : env.valueFrom?.configMapKeyRef ? (
+                                      <Badge variant="secondary" className="text-xs">
+                                        ConfigMap: {env.valueFrom.configMapKeyRef.name}/{env.valueFrom.configMapKeyRef.key}
+                                      </Badge>
+                                    ) : (
+                                      <span className="italic text-muted-foreground">-</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {pod.spec.containers.every(c => !c.env || c.env.length === 0) && (
+                    <p className="text-sm text-muted-foreground italic">No environment variables configured</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Labels & Annotations */}
             {(pod.metadata.labels || pod.metadata.annotations) && (
               <Card className="lg:col-span-2">

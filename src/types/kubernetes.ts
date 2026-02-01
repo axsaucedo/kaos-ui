@@ -338,6 +338,7 @@ export interface Pod {
       command?: string[];
       args?: string[];
       ports?: { containerPort: number }[];
+      env?: EnvVar[];
     }[];
     nodeName?: string;
   };
