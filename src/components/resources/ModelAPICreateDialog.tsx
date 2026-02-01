@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Box, Plus, Trash2, Key, Lock } from 'lucide-react';
+import { Box } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
@@ -31,23 +30,21 @@ import {
   EnvVarEntry, 
   envVarEntriesToK8sEnvVars 
 } from './shared/EnvVarEditorWithSecrets';
+import { 
+  ApiKeySecretPicker, 
+  pickerValueToApiKeySource,
+  ApiKeyType 
+} from './shared/ApiKeySecretPicker';
 import { validateKubernetesName } from './shared/EnvVarEditor';
-import type { ModelAPI, ModelAPIMode, ApiKeySource } from '@/types/kubernetes';
-
-type ApiKeyType = 'none' | 'value' | 'secretKeyRef' | 'configMapKeyRef';
+import type { ModelAPI, ModelAPIMode } from '@/types/kubernetes';
 
 interface ModelAPIFormData {
   name: string;
   mode: ModelAPIMode;
   // Proxy mode fields
   models: string;
+  provider: string;
   apiBase: string;
-  apiKeyType: ApiKeyType;
-  apiKeyValue: string;
-  apiKeySecretName: string;
-  apiKeySecretKey: string;
-  apiKeyConfigMapName: string;
-  apiKeyConfigMapKey: string;
   configYamlString: string;
   // Hosted mode fields
   hostedModel: string;
@@ -63,6 +60,12 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
   const { modelAPIs } = useKubernetesStore();
   const { namespace, createModelAPI } = useKubernetesConnection();
   const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
+  const [apiKeyValue, setApiKeyValue] = useState<{
+    type: ApiKeyType;
+    directValue?: string;
+    secretName?: string;
+    secretKey?: string;
+  }>({ type: 'none' });
 
   const {
     register,
@@ -76,43 +79,20 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
       name: '',
       mode: 'Proxy',
       models: '*',
+      provider: '',
       apiBase: '',
-      apiKeyType: 'none',
-      apiKeyValue: '',
-      apiKeySecretName: '',
-      apiKeySecretKey: '',
-      apiKeyConfigMapName: '',
-      apiKeyConfigMapKey: '',
       configYamlString: '',
       hostedModel: '',
     },
   });
 
   const watchedMode = watch('mode');
-  const watchedApiKeyType = watch('apiKeyType');
 
   const validateUniqueName = (name: string) => {
     if (modelAPIs.some((api) => api.metadata.name === name)) {
       return 'A ModelAPI with this name already exists';
     }
     return true;
-  };
-
-  const buildApiKeySource = (data: ModelAPIFormData): ApiKeySource | undefined => {
-    switch (data.apiKeyType) {
-      case 'value':
-        return data.apiKeyValue ? { value: data.apiKeyValue } : undefined;
-      case 'secretKeyRef':
-        return data.apiKeySecretName && data.apiKeySecretKey
-          ? { valueFrom: { secretKeyRef: { name: data.apiKeySecretName, key: data.apiKeySecretKey } } }
-          : undefined;
-      case 'configMapKeyRef':
-        return data.apiKeyConfigMapName && data.apiKeyConfigMapKey
-          ? { valueFrom: { configMapKeyRef: { name: data.apiKeyConfigMapName, key: data.apiKeyConfigMapKey } } }
-          : undefined;
-      default:
-        return undefined;
-    }
   };
 
   const parseModels = (modelsStr: string): string[] => {
@@ -148,8 +128,9 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
           proxyConfig: data.mode === 'Proxy' 
             ? { 
                 models,
+                provider: data.provider || undefined,
                 apiBase: data.apiBase || undefined,
-                apiKey: buildApiKeySource(data),
+                apiKey: pickerValueToApiKeySource(apiKeyValue),
                 configYaml: data.configYamlString ? { fromString: data.configYamlString } : undefined,
               }
             : undefined,
@@ -158,7 +139,7 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
                 model: data.hostedModel, 
               }
             : undefined,
-          // NEW: env vars now go in container.env (not proxyConfig.env/hostedConfig.env)
+          // env vars now go in container.env
           container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
         },
       };
@@ -172,6 +153,7 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
       
       reset();
       setEnvVars([]);
+      setApiKeyValue({ type: 'none' });
       onClose();
     } catch (error) {
       toast({
@@ -185,6 +167,7 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
   const handleClose = () => {
     reset();
     setEnvVars([]);
+    setApiKeyValue({ type: 'none' });
     onClose();
   };
 
@@ -278,6 +261,19 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
                   </div>
 
                   <div className="space-y-2">
+                    <Label htmlFor="provider">Provider (optional)</Label>
+                    <Input
+                      id="provider"
+                      {...register('provider')}
+                      placeholder="e.g., openai, anthropic, ollama"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      LiteLLM provider prefix. When set, model names are prefixed with this provider.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="apiBase">API Base URL</Label>
                     <Input
                       id="apiBase"
@@ -292,104 +288,11 @@ export function ModelAPICreateDialog({ open, onClose }: ModelAPICreateDialogProp
 
                   <Separator />
 
-                  {/* API Key Configuration */}
-                  <div className="space-y-4">
-                    <Label className="flex items-center gap-2">
-                      <Key className="h-4 w-4" />
-                      API Key Configuration
-                    </Label>
-                    <Select
-                      value={watchedApiKeyType}
-                      onValueChange={(value: ApiKeyType) => setValue('apiKeyType', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select API key source" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No API Key</SelectItem>
-                        <SelectItem value="value">Direct Value</SelectItem>
-                        <SelectItem value="secretKeyRef">From Secret</SelectItem>
-                        <SelectItem value="configMapKeyRef">From ConfigMap</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {watchedApiKeyType === 'value' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="apiKeyValue" className="text-xs text-muted-foreground">
-                          API Key Value
-                        </Label>
-                        <Input
-                          id="apiKeyValue"
-                          type="password"
-                          {...register('apiKeyValue')}
-                          placeholder="sk-..."
-                          className="font-mono"
-                        />
-                        <p className="text-xs text-warning flex items-center gap-1">
-                          <Lock className="h-3 w-3" />
-                          Not recommended for production - use Secret reference instead
-                        </p>
-                      </div>
-                    )}
-
-                    {watchedApiKeyType === 'secretKeyRef' && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKeySecretName" className="text-xs text-muted-foreground">
-                            Secret Name
-                          </Label>
-                          <Input
-                            id="apiKeySecretName"
-                            {...register('apiKeySecretName')}
-                            placeholder="api-secrets"
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKeySecretKey" className="text-xs text-muted-foreground">
-                            Secret Key
-                          </Label>
-                          <Input
-                            id="apiKeySecretKey"
-                            {...register('apiKeySecretKey')}
-                            placeholder="api-key"
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {watchedApiKeyType === 'configMapKeyRef' && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKeyConfigMapName" className="text-xs text-muted-foreground">
-                            ConfigMap Name
-                          </Label>
-                          <Input
-                            id="apiKeyConfigMapName"
-                            {...register('apiKeyConfigMapName')}
-                            placeholder="api-config"
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKeyConfigMapKey" className="text-xs text-muted-foreground">
-                            ConfigMap Key
-                          </Label>
-                          <Input
-                            id="apiKeyConfigMapKey"
-                            {...register('apiKeyConfigMapKey')}
-                            placeholder="api-key"
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    <p className="text-xs text-muted-foreground">
-                      Set as <code className="bg-muted px-1 rounded">PROXY_API_KEY</code> env var for LiteLLM config.
-                    </p>
-                  </div>
+                  {/* API Key Configuration with Secret Picker */}
+                  <ApiKeySecretPicker
+                    value={apiKeyValue}
+                    onChange={setApiKeyValue}
+                  />
 
                   <Separator />
 

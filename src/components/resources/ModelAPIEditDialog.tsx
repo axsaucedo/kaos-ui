@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { Box, Key, Lock } from 'lucide-react';
+import { Box } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -30,21 +30,20 @@ import {
   envVarEntriesToK8sEnvVars,
   k8sEnvVarsToEntries,
 } from './shared/EnvVarEditorWithSecrets';
+import { 
+  ApiKeySecretPicker, 
+  pickerValueToApiKeySource,
+  apiKeySourceToPickerValue,
+  ApiKeyType 
+} from './shared/ApiKeySecretPicker';
 import { LabelsAnnotationsEditor } from '@/components/shared/LabelsAnnotationsEditor';
-import type { ModelAPI, ModelAPIMode, ApiKeySource } from '@/types/kubernetes';
-
-type ApiKeyType = 'none' | 'value' | 'secretKeyRef' | 'configMapKeyRef';
+import type { ModelAPI, ModelAPIMode } from '@/types/kubernetes';
 
 interface ModelAPIFormData {
   mode: ModelAPIMode;
   models: string;
+  provider: string;
   apiBase: string;
-  apiKeyType: ApiKeyType;
-  apiKeyValue: string;
-  apiKeySecretName: string;
-  apiKeySecretKey: string;
-  apiKeyConfigMapName: string;
-  apiKeyConfigMapKey: string;
   configYamlString: string;
   hostedModel: string;
   gatewayTimeout: string;
@@ -65,18 +64,16 @@ const recordToArray = (record?: Record<string, string>) =>
 const arrayToRecord = (arr: { key: string; value: string }[]) =>
   arr.filter(item => item.key).reduce((acc, { key, value }) => ({ ...acc, [key]: value }), {});
 
-const getApiKeyType = (apiKey?: ApiKeySource): ApiKeyType => {
-  if (!apiKey) return 'none';
-  if (apiKey.value) return 'value';
-  if (apiKey.valueFrom?.secretKeyRef) return 'secretKeyRef';
-  if (apiKey.valueFrom?.configMapKeyRef) return 'configMapKeyRef';
-  return 'none';
-};
-
 export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDialogProps) {
   const { toast } = useToast();
   const { updateModelAPI } = useKubernetesConnection();
   const [envVars, setEnvVars] = useState<EnvVarEntry[]>([]);
+  const [apiKeyValue, setApiKeyValue] = useState<{
+    type: ApiKeyType;
+    directValue?: string;
+    secretName?: string;
+    secretKey?: string;
+  }>(() => apiKeySourceToPickerValue(modelAPI.spec.proxyConfig?.apiKey));
 
   const getEnvVars = () => {
     // NEW: prefer container.env, fall back to legacy proxyConfig.env/hostedConfig.env
@@ -90,17 +87,11 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
   };
 
   const getDefaultValues = (): ModelAPIFormData => {
-    const apiKey = modelAPI.spec.proxyConfig?.apiKey;
     return {
       mode: modelAPI.spec.mode,
       models: modelAPI.spec.proxyConfig?.models?.join('\n') || '*',
+      provider: modelAPI.spec.proxyConfig?.provider || '',
       apiBase: modelAPI.spec.proxyConfig?.apiBase || '',
-      apiKeyType: getApiKeyType(apiKey),
-      apiKeyValue: apiKey?.value || '',
-      apiKeySecretName: apiKey?.valueFrom?.secretKeyRef?.name || '',
-      apiKeySecretKey: apiKey?.valueFrom?.secretKeyRef?.key || '',
-      apiKeyConfigMapName: apiKey?.valueFrom?.configMapKeyRef?.name || '',
-      apiKeyConfigMapKey: apiKey?.valueFrom?.configMapKeyRef?.key || '',
       configYamlString: modelAPI.spec.proxyConfig?.configYaml?.fromString || '',
       hostedModel: modelAPI.spec.hostedConfig?.model || '',
       gatewayTimeout: modelAPI.spec.gatewayRoute?.timeout || '',
@@ -123,11 +114,11 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
   });
 
   const watchedMode = watch('mode');
-  const watchedApiKeyType = watch('apiKeyType');
 
   useEffect(() => {
     reset(getDefaultValues());
     setEnvVars(k8sEnvVarsToEntries(getEnvVars()));
+    setApiKeyValue(apiKeySourceToPickerValue(modelAPI.spec.proxyConfig?.apiKey));
   }, [modelAPI, reset]);
 
   const parseModels = (modelsStr: string): string[] => {
@@ -135,23 +126,6 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
       .split(/[,\n]/)
       .map(m => m.trim())
       .filter(m => m.length > 0);
-  };
-
-  const buildApiKeySource = (data: ModelAPIFormData): ApiKeySource | undefined => {
-    switch (data.apiKeyType) {
-      case 'value':
-        return data.apiKeyValue ? { value: data.apiKeyValue } : undefined;
-      case 'secretKeyRef':
-        return data.apiKeySecretName && data.apiKeySecretKey
-          ? { valueFrom: { secretKeyRef: { name: data.apiKeySecretName, key: data.apiKeySecretKey } } }
-          : undefined;
-      case 'configMapKeyRef':
-        return data.apiKeyConfigMapName && data.apiKeyConfigMapKey
-          ? { valueFrom: { configMapKeyRef: { name: data.apiKeyConfigMapName, key: data.apiKeyConfigMapKey } } }
-          : undefined;
-      default:
-        return undefined;
-    }
   };
 
   const onSubmit = async (data: ModelAPIFormData) => {
@@ -182,8 +156,9 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
           proxyConfig: data.mode === 'Proxy' 
             ? { 
                 models,
+                provider: data.provider || undefined,
                 apiBase: data.apiBase || undefined,
-                apiKey: buildApiKeySource(data),
+                apiKey: pickerValueToApiKeySource(apiKeyValue),
                 configYaml: data.configYamlString ? { fromString: data.configYamlString } : undefined,
               }
             : undefined,
@@ -198,7 +173,7 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                 retries: data.gatewayRetries || undefined,
               }
             : undefined,
-          // NEW: env vars now go in container.env
+          // env vars now go in container.env
           container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
         },
       };
@@ -285,6 +260,19 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                   </div>
 
                   <div className="space-y-2">
+                    <Label htmlFor="provider">Provider (optional)</Label>
+                    <Input
+                      id="provider"
+                      {...register('provider')}
+                      placeholder="e.g., openai, anthropic, ollama"
+                      className="font-mono"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      LiteLLM provider prefix. When set, model names are prefixed with this provider.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="apiBase">API Base URL</Label>
                     <Input
                       id="apiBase"
@@ -299,104 +287,11 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
 
                   <Separator />
 
-                  {/* API Key Configuration */}
-                  <div className="space-y-4">
-                    <Label className="flex items-center gap-2">
-                      <Key className="h-4 w-4" />
-                      API Key Configuration
-                    </Label>
-                    <Select
-                      value={watchedApiKeyType}
-                      onValueChange={(value: ApiKeyType) => setValue('apiKeyType', value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select API key source" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">No API Key</SelectItem>
-                        <SelectItem value="value">Direct Value</SelectItem>
-                        <SelectItem value="secretKeyRef">From Secret</SelectItem>
-                        <SelectItem value="configMapKeyRef">From ConfigMap</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    {watchedApiKeyType === 'value' && (
-                      <div className="space-y-2">
-                        <Label htmlFor="apiKeyValue" className="text-xs text-muted-foreground">
-                          API Key Value
-                        </Label>
-                        <Input
-                          id="apiKeyValue"
-                          type="password"
-                          {...register('apiKeyValue')}
-                          placeholder="sk-..."
-                          className="font-mono"
-                        />
-                        <p className="text-xs text-warning flex items-center gap-1">
-                          <Lock className="h-3 w-3" />
-                          Not recommended for production - use Secret reference instead
-                        </p>
-                      </div>
-                    )}
-
-                    {watchedApiKeyType === 'secretKeyRef' && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKeySecretName" className="text-xs text-muted-foreground">
-                            Secret Name
-                          </Label>
-                          <Input
-                            id="apiKeySecretName"
-                            {...register('apiKeySecretName')}
-                            placeholder="api-secrets"
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKeySecretKey" className="text-xs text-muted-foreground">
-                            Secret Key
-                          </Label>
-                          <Input
-                            id="apiKeySecretKey"
-                            {...register('apiKeySecretKey')}
-                            placeholder="api-key"
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {watchedApiKeyType === 'configMapKeyRef' && (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKeyConfigMapName" className="text-xs text-muted-foreground">
-                            ConfigMap Name
-                          </Label>
-                          <Input
-                            id="apiKeyConfigMapName"
-                            {...register('apiKeyConfigMapName')}
-                            placeholder="api-config"
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="apiKeyConfigMapKey" className="text-xs text-muted-foreground">
-                            ConfigMap Key
-                          </Label>
-                          <Input
-                            id="apiKeyConfigMapKey"
-                            {...register('apiKeyConfigMapKey')}
-                            placeholder="api-key"
-                            className="font-mono text-sm"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    <p className="text-xs text-muted-foreground">
-                      Set as <code className="bg-muted px-1 rounded">PROXY_API_KEY</code> env var for LiteLLM config.
-                    </p>
-                  </div>
+                  {/* API Key Configuration with Secret Picker */}
+                  <ApiKeySecretPicker
+                    value={apiKeyValue}
+                    onChange={setApiKeyValue}
+                  />
 
                   <Separator />
 
@@ -447,7 +342,7 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                     <Input
                       id="gatewayTimeout"
                       {...register('gatewayTimeout')}
-                      placeholder="e.g., 30s, 5m"
+                      placeholder="e.g., 5m"
                       className="font-mono text-sm"
                     />
                   </div>
@@ -458,8 +353,6 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
                     <Input
                       id="gatewayRetries"
                       type="number"
-                      min={0}
-                      max={10}
                       {...register('gatewayRetries', { valueAsNumber: true })}
                       placeholder="e.g., 3"
                       className="font-mono text-sm"
@@ -493,7 +386,7 @@ export function ModelAPIEditDialog({ modelAPI, open, onClose }: ModelAPIEditDial
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Saving...' : 'Save Changes'}
+              {isSubmitting ? 'Updating...' : 'Update ModelAPI'}
             </Button>
           </DialogFooter>
         </form>

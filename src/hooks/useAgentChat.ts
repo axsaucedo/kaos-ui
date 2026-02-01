@@ -20,12 +20,13 @@ interface UseAgentChatOptions {
   model?: string;
   temperature?: number;
   sessionId?: string; // Optional session ID for conversation continuity
+  seed?: number; // Optional seed for deterministic responses
   onSessionIdReceived?: (sessionId: string) => void; // Callback when session ID is received from response
   initialMessages?: ChatMessage[]; // Initial messages to populate the chat
 }
 
 export function useAgentChat(options: UseAgentChatOptions) {
-  const { agentName, namespace, serviceName, model, temperature, sessionId, onSessionIdReceived, initialMessages = [] } = options;
+  const { agentName, namespace, serviceName, model, temperature, sessionId, seed, onSessionIdReceived, initialMessages = [] } = options;
   
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [isLoading, setIsLoading] = useState(false);
@@ -87,6 +88,7 @@ export function useAgentChat(options: UseAgentChatOptions) {
           model,
           temperature,
           sessionId,
+          seed,
           onChunk: (chunk) => {
             console.log(`[useAgentChat] Received chunk:`, chunk);
             setMessages(prev => {
@@ -135,7 +137,7 @@ export function useAgentChat(options: UseAgentChatOptions) {
       setError(err instanceof Error ? err.message : 'Unknown error');
       setIsLoading(false);
     }
-  }, [messages, isLoading, resolvedServiceName, namespace, model, temperature, sessionId, onSessionIdReceived]);
+  }, [messages, isLoading, resolvedServiceName, namespace, model, temperature, sessionId, seed, onSessionIdReceived]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);

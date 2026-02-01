@@ -148,6 +148,14 @@ export function AgentOverview({ agent }: AgentOverviewProps) {
             label="Model API"
             value={<Badge variant="modelapi">{spec.modelAPI}</Badge>}
           />
+          <InfoRow
+            label="Model"
+            value={
+              <code className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                {spec.model || status?.model || 'Not specified'}
+              </code>
+            }
+          />
           {spec.config?.reasoningLoopMaxSteps && (
             <InfoRow
               label="Max Reasoning Steps"

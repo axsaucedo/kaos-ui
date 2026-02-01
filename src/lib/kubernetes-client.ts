@@ -1011,12 +1011,13 @@ class KubernetesClient {
       temperature?: number;
       maxTokens?: number;
       sessionId?: string;
+      seed?: number;
       onChunk: (content: string) => void;
       onDone: (metadata?: { sessionId?: string }) => void;
       onError: (error: Error) => void;
     }
   ): Promise<void> {
-    const { namespace, model = 'default', temperature = 0.7, maxTokens, sessionId, onChunk, onDone, onError } = options;
+    const { namespace, model = 'default', temperature = 0.7, maxTokens, sessionId, seed, onChunk, onDone, onError } = options;
 
     try {
       const response = await this.proxyServiceRequest(
@@ -1031,6 +1032,7 @@ class KubernetesClient {
             temperature,
             ...(maxTokens && { max_tokens: maxTokens }),
             ...(sessionId && { session_id: sessionId }),
+            ...(seed !== undefined && { seed }),
           }),
         },
         namespace

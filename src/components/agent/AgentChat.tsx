@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Trash2, StopCircle, AlertCircle, RefreshCw, Hash, Copy, Check, Plus } from 'lucide-react';
+import { Send, Trash2, StopCircle, AlertCircle, RefreshCw, Hash, Copy, Check, Plus, Shuffle, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
 import { ChatMessage } from './ChatMessage';
 import { useAgentChat, ChatMessage as ChatMessageType } from '@/hooks/useAgentChat';
+import { k8sClient } from '@/lib/kubernetes-client';
 import type { Agent } from '@/types/kubernetes';
 
 interface AgentChatProps {
@@ -29,6 +30,8 @@ export function AgentChat({
 }: AgentChatProps) {
   const [input, setInput] = useState('');
   const [copied, setCopied] = useState(false);
+  const [seed, setSeed] = useState<string>('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -57,9 +60,60 @@ export function AgentChat({
     agentName: agent.metadata.name,
     namespace: agent.metadata.namespace || 'default',
     sessionId: sessionId || undefined,
+    seed: seed ? parseInt(seed, 10) : undefined,
     onSessionIdReceived: handleSessionIdReceived,
     initialMessages: externalMessages,
   });
+
+  // Fetch session history when a session ID is entered manually
+  const fetchSessionHistory = useCallback(async (sid: string) => {
+    if (!sid || !k8sClient.isConfigured()) return;
+    
+    setIsLoadingHistory(true);
+    try {
+      const serviceName = `agent-${agent.metadata.name}`;
+      const namespace = agent.metadata.namespace || 'default';
+      
+      const response = await k8sClient.proxyServiceRequest(
+        serviceName,
+        `/memory/events?session_id=${encodeURIComponent(sid)}`,
+        { method: 'GET' },
+        namespace
+      );
+      
+      if (response.ok) {
+        const data = await response.json();
+        const events = data.events || [];
+        
+        // Convert memory events to chat messages
+        const historyMessages: ChatMessageType[] = events
+          .filter((e: any) => e.role === 'user' || e.role === 'assistant')
+          .map((e: any, idx: number) => ({
+            id: e.id || `hist-${idx}`,
+            role: e.role,
+            content: typeof e.content === 'string' ? e.content : JSON.stringify(e.content),
+            timestamp: e.timestamp ? new Date(e.timestamp) : new Date(),
+            isStreaming: false,
+          }));
+        
+        if (historyMessages.length > 0) {
+          onMessagesChange(historyMessages);
+          console.log(`[AgentChat] Loaded ${historyMessages.length} messages from session history`);
+        }
+      }
+    } catch (err) {
+      console.error('[AgentChat] Failed to fetch session history:', err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  }, [agent.metadata.name, agent.metadata.namespace, onMessagesChange]);
+
+  // Handler for session ID input blur - fetch history if session ID was entered
+  const handleSessionIdBlur = useCallback(() => {
+    if (sessionId && externalMessages.length === 0 && !hasActiveSession) {
+      fetchSessionHistory(sessionId);
+    }
+  }, [sessionId, externalMessages.length, hasActiveSession, fetchSessionHistory]);
   
   // Sync hook messages back to parent
   useEffect(() => {
@@ -114,23 +168,36 @@ export function AgentChat({
 
   return (
     <div className="flex flex-col h-full bg-background rounded-lg border border-border overflow-hidden">
-      {/* Session ID Header */}
-      <div className="px-4 py-3 border-b border-border bg-muted/20">
+      {/* Session & Seed Header */}
+      <div className="px-4 py-3 border-b border-border bg-muted/20 space-y-2">
         <div className="flex items-center gap-2">
           <Label htmlFor="session-id" className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
             <Hash className="h-3 w-3" />
-            Session ID
+            Session
           </Label>
           <div className="flex-1 flex items-center gap-2">
             <Input
               id="session-id"
               value={sessionId}
               onChange={(e) => !hasActiveSession && onSessionChange(e.target.value)}
-              placeholder={hasActiveSession ? "Session active" : "Enter session ID or leave empty to auto-generate..."}
+              onBlur={handleSessionIdBlur}
+              placeholder={hasActiveSession ? "Session active" : "Enter session ID or leave empty..."}
               className="h-7 text-xs font-mono bg-background"
-              disabled={isLoading || hasActiveSession}
+              disabled={isLoading || hasActiveSession || isLoadingHistory}
               readOnly={hasActiveSession}
             />
+            {sessionId && !hasActiveSession && externalMessages.length === 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => fetchSessionHistory(sessionId)}
+                className="h-7 w-7 p-0 shrink-0"
+                title="Load session history"
+                disabled={isLoadingHistory}
+              >
+                <Download className={`h-3 w-3 ${isLoadingHistory ? 'animate-pulse' : ''}`} />
+              </Button>
+            )}
             {sessionId && (
               <Button
                 variant="ghost"
@@ -154,9 +221,29 @@ export function AgentChat({
               disabled={isLoading}
             >
               <Plus className="h-3 w-3 mr-1" />
-              New Session
+              New
             </Button>
           </div>
+        </div>
+        
+        {/* Seed input row */}
+        <div className="flex items-center gap-2">
+          <Label htmlFor="seed" className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
+            <Shuffle className="h-3 w-3" />
+            Seed
+          </Label>
+          <Input
+            id="seed"
+            type="number"
+            value={seed}
+            onChange={(e) => setSeed(e.target.value)}
+            placeholder="Optional (for determinism)"
+            className="h-7 text-xs font-mono bg-background max-w-[200px]"
+            disabled={isLoading}
+          />
+          <span className="text-xs text-muted-foreground">
+            {seed ? 'Deterministic mode' : 'Random responses'}
+          </span>
         </div>
       </div>
 
@@ -164,6 +251,11 @@ export function AgentChat({
       <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">Chat with {agent.metadata.name}</span>
+          {agent.spec.model && (
+            <span className="text-xs text-muted-foreground font-mono bg-muted px-1.5 py-0.5 rounded">
+              {agent.spec.model}
+            </span>
+          )}
           {externalMessages.length > 0 && (
             <span className="text-xs text-muted-foreground">
               ({externalMessages.length} messages)
