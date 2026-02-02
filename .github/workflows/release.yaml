@@ -176,13 +176,28 @@ jobs:
           echo "next_dev=$NEXT_DEV" >> $GITHUB_OUTPUT
           echo "Next dev version: $NEXT_DEV"
 
+      - name: Check if already bumped
+        id: check-bump
+        run: |
+          CURRENT_VERSION=$(cat VERSION)
+          NEXT_DEV=${{ steps.next.outputs.next_dev }}
+          if [ "$CURRENT_VERSION" = "$NEXT_DEV" ]; then
+            echo "VERSION already set to $NEXT_DEV, skipping bump"
+            echo "skip=true" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION is $CURRENT_VERSION, will bump to $NEXT_DEV"
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Update VERSION file
+        if: steps.check-bump.outputs.skip != 'true'
         run: |
           NEXT_DEV=${{ steps.next.outputs.next_dev }}
           echo "$NEXT_DEV" > VERSION
           echo "Updated VERSION to: $NEXT_DEV"
 
       - name: Create Pull Request
+        if: steps.check-bump.outputs.skip != 'true'
         id: cpr
         uses: peter-evans/create-pull-request@v6
         with:
@@ -203,7 +218,7 @@ jobs:
             version-bump
 
       - name: Enable auto-merge for bump PR
-        if: steps.cpr.outputs.pull-request-number
+        if: steps.check-bump.outputs.skip != 'true' && steps.cpr.outputs.pull-request-number
         run: gh pr merge --auto --merge "${{ steps.cpr.outputs.pull-request-number }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
