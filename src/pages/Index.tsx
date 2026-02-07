@@ -1,4 +1,5 @@
 import { OverviewDashboard } from '@/components/dashboard/OverviewDashboard';
+import { VisualMap } from '@/components/dashboard/VisualMap';
 import { ModelAPIList } from '@/components/resources/ModelAPIList';
 import { MCPServerList } from '@/components/resources/MCPServerList';
 import { AgentList } from '@/components/resources/AgentList';
@@ -31,6 +32,7 @@ function IndexContent() {
   const renderContent = () => {
     switch (activeTab) {
       case 'overview': return <OverviewDashboard />;
+      case 'visual-map': return <VisualMap />;
       case 'model-apis': return <ModelAPIList />;
       case 'mcp-servers': return <MCPServerList />;
       case 'agents': return <AgentList />;

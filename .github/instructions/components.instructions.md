@@ -11,7 +11,7 @@ src/components/
 ├── agent/           # Agent-specific (Chat, Memory, Overview, Pods)
 ├── mcp/             # MCPServer (Overview, Pods, ToolsDebug)
 ├── modelapi/        # ModelAPI (Overview, Pods, Diagnostics)
-├── dashboard/       # Dashboard widgets (OverviewDashboard)
+├── dashboard/       # Dashboard widgets (OverviewDashboard, VisualMap)
 ├── kubernetes/      # K8s resources (PodsList, SecretsList, CreateSecretDialog)
 ├── layout/          # Layout (MainLayout, Sidebar, Header, ConnectionStatus)
 ├── resources/       # Resource CRUD
@@ -24,6 +24,27 @@ src/components/
 ├── theme/           # Theme (ThemeProvider, ThemeToggle)
 └── ui/              # shadcn/ui base components (DO NOT MODIFY)
 ```
+
+### Sidebar Structure
+
+The sidebar is organized into 5 sections:
+
+| Section | Items |
+|---------|-------|
+| **OVERVIEW** | Summary (id: `overview`), Visual Map (id: `visual-map`) |
+| **KAOS RESOURCES** | Model APIs, MCP Servers, Agents |
+| **KUBERNETES** | Pods, Secrets |
+| **MONITORING** | KAOS System, KAOS Observability (id: `kaos-monitoring`) |
+| **CONFIG** | Settings |
+
+### Visual Map (`VisualMap.tsx`)
+
+Interactive node-based visualization using `@xyflow/react`:
+- 3-column layout: ModelAPI → MCPServer → Agent
+- Edges derived from `agent.spec.modelAPI` and `agent.spec.mcpServers[]`
+- Custom `ResourceNode` with colored left border, status badge, namespace
+- Click navigates to resource detail page
+- Includes MiniMap, Controls, and fitView
 
 ### Component Naming
 

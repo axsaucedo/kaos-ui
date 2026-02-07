@@ -2,6 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
+  Map,
   Box,
   Server,
   Bot,
@@ -32,22 +33,47 @@ interface NavItem {
   badgeVariant?: 'default' | 'destructive' | 'success' | 'warning';
 }
 
-const navItems: NavItem[] = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'model-apis', label: 'Model APIs', icon: Box },
-  { id: 'mcp-servers', label: 'MCP Servers', icon: Server },
-  { id: 'agents', label: 'Agents', icon: Bot },
-];
+interface NavSection {
+  title: string;
+  items: NavItem[];
+}
 
-const k8sItems: NavItem[] = [
-  { id: 'pods', label: 'Pods', icon: Boxes },
-  { id: 'secrets', label: 'Secrets', icon: KeyRound },
-  { id: 'kaos-system', label: 'KAOS System', icon: Cog },
-  { id: 'kaos-monitoring', label: 'KAOS Monitoring', icon: Activity },
-];
-
-const toolItems: NavItem[] = [
-  { id: 'settings', label: 'Settings', icon: Settings },
+const sections: NavSection[] = [
+  {
+    title: 'Overview',
+    items: [
+      { id: 'overview', label: 'Summary', icon: LayoutDashboard },
+      { id: 'visual-map', label: 'Visual Map', icon: Map },
+    ],
+  },
+  {
+    title: 'KAOS Resources',
+    items: [
+      { id: 'model-apis', label: 'Model APIs', icon: Box },
+      { id: 'mcp-servers', label: 'MCP Servers', icon: Server },
+      { id: 'agents', label: 'Agents', icon: Bot },
+    ],
+  },
+  {
+    title: 'Kubernetes',
+    items: [
+      { id: 'pods', label: 'Pods', icon: Boxes },
+      { id: 'secrets', label: 'Secrets', icon: KeyRound },
+    ],
+  },
+  {
+    title: 'Monitoring',
+    items: [
+      { id: 'kaos-system', label: 'KAOS System', icon: Cog },
+      { id: 'kaos-monitoring', label: 'KAOS Observability', icon: Activity },
+    ],
+  },
+  {
+    title: 'Config',
+    items: [
+      { id: 'settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {
@@ -66,11 +92,11 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     }
   };
 
-  // Map tab IDs to URL tab params for navigation
   const getTabParam = (id: string): string => {
     switch (id) {
       case 'model-apis': return 'modelapis';
       case 'mcp-servers': return 'mcpservers';
+      case 'visual-map': return 'visual-map';
       case 'overview': return 'overview';
       default: return id;
     }
@@ -78,7 +104,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   const handleNavClick = (itemId: string) => {
     setActiveTab(itemId);
-    // If we're on a detail page, navigate back to the main dashboard with the appropriate tab
     const path = location.pathname;
     if (path !== '/' && !path.startsWith('/?')) {
       navigate(`/?tab=${getTabParam(itemId)}`);
@@ -107,7 +132,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <span className="flex-1 text-left text-sm font-medium">{item.label}</span>
             {count !== undefined && count > 0 && (
               <Badge
-                variant={item.id === 'alerts' ? 'error' : 'secondary'}
+                variant="secondary"
                 className="text-[10px] px-1.5 py-0"
               >
                 {count}
@@ -129,10 +154,10 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-sidebar-border">
         {!collapsed && (
-          <button 
+          <button
             onClick={() => handleNavClick('overview')}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
-            title="Go to Overview"
+            title="Go to Summary"
           >
             <div className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center">
               <span className="text-primary font-bold text-sm">K</span>
@@ -147,7 +172,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <button
             onClick={() => handleNavClick('overview')}
             className="h-8 w-8 rounded-lg bg-primary/20 flex items-center justify-center hover:opacity-80 transition-opacity mx-auto"
-            title="Go to Overview"
+            title="Go to Summary"
           >
             <span className="text-primary font-bold text-sm">K</span>
           </button>
@@ -163,41 +188,21 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-6 overflow-y-auto">
-        {/* Main Navigation */}
-        <div className="space-y-1">
-          {!collapsed && (
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
-              Agentic Resources
-            </p>
-          )}
-          {navItems.map(renderNavItem)}
-        </div>
-
-        {/* Kubernetes Resources */}
-        <div className="space-y-1">
-          {!collapsed && (
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
-              Kubernetes
-            </p>
-          )}
-          {k8sItems.map(renderNavItem)}
-        </div>
-
-        {/* Tools */}
-        <div className="space-y-1">
-          {!collapsed && (
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
-              Tools
-            </p>
-          )}
-          {toolItems.map(renderNavItem)}
-        </div>
+      <nav className="flex-1 p-3 space-y-5 overflow-y-auto">
+        {sections.map((section) => (
+          <div key={section.title} className="space-y-1">
+            {!collapsed && (
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-2">
+                {section.title}
+              </p>
+            )}
+            {section.items.map(renderNavItem)}
+          </div>
+        ))}
       </nav>
 
       {/* Footer */}
       <div className="p-3 border-t border-sidebar-border space-y-2">
-        {/* Connection Status */}
         <div className={cn(
           'flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30',
           collapsed && 'justify-center'
@@ -207,8 +212,6 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
             <span className="text-xs text-muted-foreground">Connected to cluster</span>
           )}
         </div>
-        
-        {/* Version Switcher */}
         <div className={cn(
           'flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/30',
           collapsed && 'justify-center'
