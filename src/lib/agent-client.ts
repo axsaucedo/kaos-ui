@@ -115,6 +115,19 @@ export async function streamAgentChat(
     const decoder = new TextDecoder();
     let buffer = '';
     let receivedSessionId: string | undefined;
+    // Accumulate raw content to enable cross-chunk artifact cleanup
+    let accumulatedContent = '';
+
+    const finalCleanup = () => {
+      // Clean artifacts that may span multiple SSE chunks
+      let cleaned = accumulatedContent;
+      cleaned = cleaned.replace(/```json\s*\{\s*\}\s*```\s*/g, '');
+      cleaned = cleaned.replace(/\*\*Final Response to User:\*\*\s*/g, '');
+      cleaned = cleaned.replace(/\*\*Final Response:\*\*\s*/g, '');
+      cleaned = cleaned.replace(/^\s*\{\s*\}\s*/g, '');
+      cleaned = cleaned.replace(/\s*\{\s*\}\s*$/g, '');
+      return cleaned.trim();
+    };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -163,13 +176,16 @@ export async function streamAgentChat(
                 }
               }
 
-              // Strip known artifacts
+              // Skip chunks that are just markdown code fence openers/closers
+              if (trimmedContent === '```' || trimmedContent === '```json') continue;
+
+              // Strip known artifact headers inline
               let cleaned = content;
-              cleaned = cleaned.replace(/```json\n\{\}\n```\n*/g, '');
               cleaned = cleaned.replace(/\*\*Final Response to User:\*\*\s*/g, '');
               cleaned = cleaned.replace(/\*\*Final Response:\*\*\s*/g, '');
-              if (cleaned.trim() === '{}' || cleaned.trim() === '') continue;
+              if (cleaned.trim() === '') continue;
 
+              accumulatedContent += cleaned;
               onChunk(cleaned);
             }
           } catch {
