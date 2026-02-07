@@ -92,9 +92,10 @@ class KubernetesClient {
       throw new Error(`K8s API error ${response.status}: ${errorText}`);
     }
 
-    // Use text() + JSON.parse() to avoid "Decoding failed" errors
-    // that occur with response.json() on some chunked/encoded responses (e.g. pods)
-    const text = await response.text();
+    // Use arrayBuffer + TextDecoder to handle chunked/encoded responses (e.g. pods)
+    // that cause "Decoding failed" errors with response.text() or response.json()
+    const buffer = await response.arrayBuffer();
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(buffer);
     return JSON.parse(text);
   }
 
@@ -565,6 +566,16 @@ class KubernetesClient {
       }
     }
     
+    // If no SSE data: lines found, try parsing the entire text as plain JSON
+    // (some servers return plain JSON with text/event-stream Content-Type on errors)
+    if (jsonData === null) {
+      try {
+        jsonData = JSON.parse(text.trim());
+      } catch {
+        // Not valid JSON either
+      }
+    }
+    
     return jsonData;
   }
 
@@ -597,7 +608,7 @@ class KubernetesClient {
       id: Date.now(),
       method: 'initialize',
       params: {
-        protocolVersion: '2025-03-26',
+        protocolVersion: '2024-11-05',
         clientInfo: {
           name: 'kaos-ui',
           version: '1.0.0',
@@ -777,9 +788,10 @@ class KubernetesClient {
     // Make the tools/list request with session
     console.log(`[k8sClient] Sending session-based JSON-RPC tools/list to ${serviceName}`);
     
-    const headers: Record<string, string> = {
-      'Mcp-Session-Id': sessionId,
-    };
+    const headers: Record<string, string> = {};
+    if (sessionId) {
+      headers['Mcp-Session-Id'] = sessionId;
+    }
     
     const response = await this.proxyServiceRequest(
       serviceName,
@@ -885,9 +897,10 @@ class KubernetesClient {
     // Make the tools/call request with session
     console.log(`[k8sClient] Sending session-based JSON-RPC tools/call to ${serviceName}`);
     
-    const headers: Record<string, string> = {
-      'Mcp-Session-Id': sessionId,
-    };
+    const headers: Record<string, string> = {};
+    if (sessionId) {
+      headers['Mcp-Session-Id'] = sessionId;
+    }
     
     const response = await this.proxyServiceRequest(
       serviceName,

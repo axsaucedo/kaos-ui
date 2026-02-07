@@ -66,7 +66,9 @@ function parseSSEResponse(text: string): unknown {
       }
     }
   }
-  throw new Error(`Could not parse SSE response: ${text.substring(0, 200)}`);
+  // Fallback: try parsing the entire text as plain JSON
+  // (servers may return plain JSON with SSE Content-Type on errors)
+  return JSON.parse(text.trim());
 }
 
 /**
