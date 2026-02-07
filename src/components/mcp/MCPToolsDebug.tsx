@@ -70,6 +70,27 @@ function parseSSEResponse(text: string): unknown {
 }
 
 /**
+ * Extract session ID from response headers, trying multiple approaches
+ * since K8s proxy may strip or rename custom headers.
+ */
+function extractSessionId(response: Response): string | null {
+  // Try standard header name (case-insensitive per fetch spec)
+  const direct = response.headers.get('mcp-session-id');
+  if (direct) return direct;
+
+  // Iterate all headers looking for session-related ones
+  // (K8s proxy may lowercase or transform header names)
+  let found: string | null = null;
+  response.headers.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (lower === 'mcp-session-id' || lower === 'x-mcp-session-id' || lower === 'session-id') {
+      found = value;
+    }
+  });
+  return found;
+}
+
+/**
  * Simple MCP HTTP request helper
  */
 async function mcpRequest<T>(
@@ -106,7 +127,7 @@ async function mcpRequest<T>(
     body: JSON.stringify(body),
   });
 
-  const sessionId = response.headers.get('mcp-session-id');
+  const sessionId = extractSessionId(response);
 
   if (!response.ok) {
     const errorText = await response.text();
@@ -180,6 +201,17 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
     setToolsError(null);
     
     try {
+      // Use k8sClient's listMCPToolsFromEndpoint which has stateless fallback
+      const endpoint = mcpServer.status?.endpoint;
+      if (endpoint) {
+        const result = await k8sClient.listMCPToolsFromEndpoint(endpoint);
+        setTools(result.tools || []);
+        // Store session as null — k8sClient manages its own session internally
+        sessionRef.current = { sessionId: null, initialized: true };
+        return;
+      }
+
+      // Fallback: manual MCP protocol
       const mcpUrl = getMCPUrl();
       
       // Step 1: Initialize
@@ -197,16 +229,24 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
         sessionId: initResult.sessionId,
         initialized: false,
       };
+
+      if (!initResult.sessionId) {
+        console.warn('[MCPToolsDebug] No session ID returned from initialize — K8s proxy may strip Mcp-Session-Id header.');
+      }
       
-      // Step 2: Send initialized notification
-      await mcpRequest(
-        mcpUrl,
-        'notifications/initialized',
-        {},
-        sessionRef.current,
-        true
-      );
-      sessionRef.current.initialized = true;
+      // Step 2: Send initialized notification (catch errors from missing session)
+      try {
+        await mcpRequest(
+          mcpUrl,
+          'notifications/initialized',
+          {},
+          sessionRef.current,
+          true
+        );
+        sessionRef.current.initialized = true;
+      } catch (notifError) {
+        console.warn('[MCPToolsDebug] Notification failed:', notifError);
+      }
       
       // Step 3: List tools
       const { data } = await mcpRequest<{ tools: MCPTool[] }>(
@@ -225,7 +265,7 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
     } finally {
       setIsLoadingTools(false);
     }
-  }, [getMCPUrl]);
+  }, [getMCPUrl, mcpServer]);
 
   // Fetch tools on mount
   useEffect(() => {
@@ -300,15 +340,22 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
     };
 
     try {
-      const mcpUrl = getMCPUrl();
-      const { data } = await mcpRequest<MCPToolCallResult>(
-        mcpUrl,
-        'tools/call',
-        { name: selectedTool.name, arguments: parsedArgs },
-        sessionRef.current
-      );
-      
-      historyEntry.result = data;
+      // Use k8sClient's callMCPToolFromEndpoint which handles session management
+      const endpoint = mcpServer.status?.endpoint;
+      if (endpoint) {
+        const result = await k8sClient.callMCPToolFromEndpoint(endpoint, selectedTool.name, parsedArgs);
+        historyEntry.result = result;
+      } else {
+        // Fallback to inline MCP request
+        const mcpUrl = getMCPUrl();
+        const { data } = await mcpRequest<MCPToolCallResult>(
+          mcpUrl,
+          'tools/call',
+          { name: selectedTool.name, arguments: parsedArgs },
+          sessionRef.current
+        );
+        historyEntry.result = data;
+      }
       historyEntry.duration = Date.now() - startTime;
     } catch (error) {
       historyEntry.error = error instanceof Error ? error.message : 'Unknown error';

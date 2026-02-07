@@ -92,7 +92,10 @@ class KubernetesClient {
       throw new Error(`K8s API error ${response.status}: ${errorText}`);
     }
 
-    return response.json();
+    // Use text() + JSON.parse() to avoid "Decoding failed" errors
+    // that occur with response.json() on some chunked/encoded responses (e.g. pods)
+    const text = await response.text();
+    return JSON.parse(text);
   }
 
   private async simpleRequest<T>(path: string): Promise<T> {
@@ -622,7 +625,23 @@ class KubernetesClient {
     }
     
     // Get session ID from response header (optional per MCP spec)
-    const sessionId = response.headers.get('Mcp-Session-Id');
+    // Try multiple approaches since K8s proxy may strip or rename headers
+    let sessionId = response.headers.get('Mcp-Session-Id') || response.headers.get('mcp-session-id');
+    
+    if (!sessionId) {
+      // Iterate all headers to find session-related ones
+      response.headers.forEach((value, key) => {
+        const lower = key.toLowerCase();
+        if (lower === 'mcp-session-id' || lower === 'x-mcp-session-id' || lower === 'session-id') {
+          sessionId = value;
+        }
+      });
+    }
+
+    // Log all response headers for debugging
+    const allHeaders: Record<string, string> = {};
+    response.headers.forEach((value, key) => { allHeaders[key] = value; });
+    console.log(`[k8sClient] MCP initialize response headers:`, allHeaders);
     
     // Consume the response body
     const body = await this.parseMCPResponse(response);
@@ -631,7 +650,7 @@ class KubernetesClient {
     if (sessionId) {
       console.log(`[k8sClient] MCP session initialized with ID:`, sessionId);
     } else {
-      console.log(`[k8sClient] MCP server running in stateless mode (no session ID)`);
+      console.warn(`[k8sClient] MCP server did not return session ID — K8s proxy may strip Mcp-Session-Id header`);
     }
     
     // Send 'notifications/initialized' as required by the protocol
@@ -752,7 +771,7 @@ class KubernetesClient {
     const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
     
     if (!sessionId) {
-      throw new Error('MCP server did not return a session ID. Check if the server supports the streamable HTTP transport.');
+      console.warn('[k8sClient] No session ID available — K8s proxy may strip Mcp-Session-Id header. Trying without session.');
     }
     
     // Make the tools/list request with session
@@ -860,7 +879,7 @@ class KubernetesClient {
     const sessionId = await this.initializeMCPSession(serviceName, namespace, port);
     
     if (!sessionId) {
-      throw new Error('MCP server did not return a session ID. Check if the server supports the streamable HTTP transport.');
+      console.warn('[k8sClient] No session ID available — K8s proxy may strip Mcp-Session-Id header. Trying without session.');
     }
     
     // Make the tools/call request with session
