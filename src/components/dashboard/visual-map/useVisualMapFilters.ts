@@ -41,7 +41,13 @@ export function useVisualMapFilters() {
       if (!kindFilter.has(data.resourceType)) matches = false;
 
       // Status filter (only if any status is selected)
-      if (statusFilter.size > 0 && !statusFilter.has(data.status?.toLowerCase())) matches = false;
+      if (statusFilter.size > 0) {
+        const s = data.status?.toLowerCase();
+        // Map deployment-aware statuses to their base filter
+        const statusMap: Record<string, string> = { updating: 'pending', progressing: 'pending' };
+        const mappedStatus = statusMap[s] || s;
+        if (!statusFilter.has(mappedStatus)) matches = false;
+      }
 
       // Search
       if (searchQuery) {

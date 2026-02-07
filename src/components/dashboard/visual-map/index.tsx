@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   ReactFlow,
   Background,
@@ -37,6 +37,22 @@ import { ModelAPICreateDialog } from '@/components/resources/ModelAPICreateDialo
 
 import type { Agent, MCPServer, ModelAPI } from '@/types/kubernetes';
 
+const VIEWPORT_STORAGE_KEY = 'visual-map-viewport';
+
+function loadSavedViewport(): Viewport | undefined {
+  try {
+    const saved = localStorage.getItem(VIEWPORT_STORAGE_KEY);
+    if (saved) return JSON.parse(saved) as Viewport;
+  } catch { /* ignore */ }
+  return undefined;
+}
+
+function saveViewport(vp: Viewport) {
+  try {
+    localStorage.setItem(VIEWPORT_STORAGE_KEY, JSON.stringify(vp));
+  } catch { /* ignore */ }
+}
+
 // ── Wrap ResourceNode with context menu + edit handler ──
 function ContextMenuResourceNode({ data, ...rest }: { data: ResourceNodeData; [key: string]: any }) {
   const { fitView } = useReactFlow();
@@ -73,52 +89,65 @@ const edgeTypes: EdgeTypes = {
 function VisualMapInner() {
   const { modelAPIs, mcpServers, agents, selectedResource, selectedResourceMode, setSelectedResource, setSelectedResourceMode } = useKubernetesStore();
   const [zoom, setZoom] = useState(1);
-  const [isCompact, setIsCompact] = useState(false);
-  const [dimModelAPIEdges, setDimModelAPIEdges] = useState(false);
 
   // Create dialog state
   const [createKind, setCreateKind] = useState<ResourceKind | null>(null);
+  const hasInitialFit = useRef(false);
 
   const {
     initialNodes,
     initialEdges,
     changed,
-    isLocked,
-    toggleLock,
+    newNodeIds,
     handleNodeDragStop,
     reLayout,
-  } = useVisualMapLayout(modelAPIs, mcpServers, agents, dimModelAPIEdges);
+  } = useVisualMapLayout(modelAPIs, mcpServers, agents);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  const { fitView } = useReactFlow();
+  const { fitView, setViewport } = useReactFlow();
 
-  // Inject onAdd callbacks into header nodes
-  const nodesWithCallbacks = useMemo(() => {
-    return initialNodes.map(node => {
-      if (node.type === 'columnHeader') {
-        const kind = node.id.replace('header-', '') as ResourceKind;
-        return { ...node, data: { ...node.data, onAdd: () => setCreateKind(kind) } };
-      }
-      return node;
-    });
-  }, [initialNodes]);
-
-  // Sync nodes when structural change, sync edges always (for dimming toggle)
+  // Sync nodes when structural change
   useEffect(() => {
     if (changed) {
-      setNodes(nodesWithCallbacks);
+      setNodes(initialNodes);
     }
-  }, [nodesWithCallbacks, changed, setNodes]);
+  }, [initialNodes, changed, setNodes]);
 
+  // Sync edges always
   useEffect(() => {
     setEdges(initialEdges);
   }, [initialEdges, setEdges]);
 
-  // Track zoom (for label detail level, NOT for compact toggle)
+  // Auto-focus on newly created resources
+  useEffect(() => {
+    if (newNodeIds.size > 0) {
+      const ids = Array.from(newNodeIds);
+      setTimeout(() => {
+        fitView({ nodes: ids.map(id => ({ id })), padding: 0.5, duration: 400 });
+      }, 100);
+    }
+  }, [newNodeIds, fitView]);
+
+  // Restore saved viewport on first mount, or fitView if none saved
+  useEffect(() => {
+    if (hasInitialFit.current) return;
+    hasInitialFit.current = true;
+    const saved = loadSavedViewport();
+    if (saved) {
+      setTimeout(() => setViewport(saved, { duration: 0 }), 50);
+    } else {
+      setTimeout(() => fitView({ padding: 0.3, duration: 300 }), 50);
+    }
+  }, [fitView, setViewport]);
+
+  // Persist viewport on change
   useOnViewportChange({
-    onChange: useCallback((vp: Viewport) => setZoom(vp.zoom), []),
+    onChange: useCallback((vp: Viewport) => {
+      setZoom(vp.zoom);
+      saveViewport(vp);
+    }, []),
   });
 
   const {
@@ -141,8 +170,9 @@ function VisualMapInner() {
     fitView({ padding: 0.3, duration: 300 });
   }, [fitView]);
 
-  const toggleCompact = useCallback(() => setIsCompact(prev => !prev), []);
-  const toggleDimModelAPIEdges = useCallback(() => setDimModelAPIEdges(prev => !prev), []);
+  const handleCreateResource = useCallback((kind: ResourceKind) => {
+    setCreateKind(kind);
+  }, []);
 
   // Determine what's being edited
   const editingAgent = selectedResourceMode === 'edit' && selectedResource?.kind === 'Agent' ? selectedResource as Agent : null;
@@ -167,37 +197,29 @@ function VisualMapInner() {
 
   return (
     <VisualMapZoomContext.Provider value={zoom}>
-      <VisualMapCompactContext.Provider value={isCompact}>
+      <VisualMapCompactContext.Provider value={false}>
         <TooltipProvider delayDuration={200}>
           <div className="h-[calc(100vh-140px)] w-full rounded-xl border border-border bg-card overflow-hidden relative">
             <VisualMapToolbar
               kindFilter={kindFilter}
               statusFilter={statusFilter}
               searchQuery={searchQuery}
-              isLocked={isLocked}
-              isCompact={isCompact}
-              dimModelAPIEdges={dimModelAPIEdges}
               onToggleKind={toggleKind}
               onToggleStatus={toggleStatus}
               onSearchChange={setSearchQuery}
               onReLayout={handleReLayout}
               onFitView={handleFitView}
-              onToggleLock={toggleLock}
-              onToggleCompact={toggleCompact}
-              onToggleDimModelAPIEdges={toggleDimModelAPIEdges}
+              onCreateResource={handleCreateResource}
             />
 
             <ReactFlow
               nodes={displayNodes}
               edges={displayEdges}
-              onNodesChange={isLocked ? undefined : onNodesChange}
+              onNodesChange={onNodesChange}
               onEdgesChange={onEdgesChange}
               onNodeDragStop={handleNodeDragStop}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
-              nodesDraggable={!isLocked}
-              fitView
-              fitViewOptions={{ padding: 0.3 }}
               proOptions={{ hideAttribution: true }}
               minZoom={0.3}
               maxZoom={2}

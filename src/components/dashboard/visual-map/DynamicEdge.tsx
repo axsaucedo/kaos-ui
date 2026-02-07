@@ -1,14 +1,9 @@
-import React, { useContext } from 'react';
+import React from 'react';
 import { getSmoothStepPath, useInternalNode, EdgeLabelRenderer, Position, type EdgeProps } from '@xyflow/react';
-import { VisualMapCompactContext } from './ResourceNode';
 
-// Full card dimensions
+// Fallback dimensions if measured not available
 const CARD_W = 240;
 const CARD_H = 120;
-
-// Compact pill dimensions (matches ResourceNode pill rendering)
-const PILL_W = 160;
-const PILL_H = 32;
 
 type Side = 'top' | 'bottom' | 'left' | 'right';
 
@@ -59,7 +54,6 @@ export function DynamicEdge({
   id, source, target, label, style, markerEnd, animated,
   labelStyle, labelBgStyle,
 }: EdgeProps) {
-  const isCompact = useContext(VisualMapCompactContext);
   const sourceNode = useInternalNode(source);
   const targetNode = useInternalNode(target);
 
@@ -68,11 +62,13 @@ export function DynamicEdge({
   const srcPos = sourceNode.internals.positionAbsolute;
   const tgtPos = targetNode.internals.positionAbsolute;
 
-  // Use correct dimensions based on compact mode
-  const w = isCompact ? PILL_W : CARD_W;
-  const h = isCompact ? PILL_H : CARD_H;
+  // Use measured dimensions for precise edge anchoring (fixes gap/drift)
+  const srcW = sourceNode.measured?.width ?? CARD_W;
+  const srcH = sourceNode.measured?.height ?? CARD_H;
+  const tgtW = targetNode.measured?.width ?? CARD_W;
+  const tgtH = targetNode.measured?.height ?? CARD_H;
 
-  const { src, tgt, srcSide, tgtSide } = bestAnchors(srcPos, tgtPos, w, h, w, h);
+  const { src, tgt, srcSide, tgtSide } = bestAnchors(srcPos, tgtPos, srcW, srcH, tgtW, tgtH);
 
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX: src.x,

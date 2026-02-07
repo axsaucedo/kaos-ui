@@ -1,5 +1,5 @@
 import React from 'react';
-import { Search, LayoutGrid, Maximize, Lock, Unlock, Minimize2, Maximize2, Eye, EyeOff } from 'lucide-react';
+import { Search, LayoutGrid, Maximize, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -9,40 +9,30 @@ interface VisualMapToolbarProps {
   kindFilter: Set<ResourceKind>;
   statusFilter: Set<string>;
   searchQuery: string;
-  isLocked: boolean;
-  isCompact: boolean;
-  dimModelAPIEdges: boolean;
   onToggleKind: (kind: ResourceKind) => void;
   onToggleStatus: (status: string) => void;
   onSearchChange: (query: string) => void;
   onReLayout: () => void;
   onFitView: () => void;
-  onToggleLock: () => void;
-  onToggleCompact: () => void;
-  onToggleDimModelAPIEdges: () => void;
+  onCreateResource: (kind: ResourceKind) => void;
 }
 
 const KIND_CHIPS: { kind: ResourceKind; label: string; colorVar: string }[] = [
   { kind: 'ModelAPI', label: 'ModelAPI', colorVar: '--modelapi-color' },
-  { kind: 'MCPServer', label: 'MCPServer', colorVar: '--mcpserver-color' },
   { kind: 'Agent', label: 'Agent', colorVar: '--agent-color' },
+  { kind: 'MCPServer', label: 'MCPServer', colorVar: '--mcpserver-color' },
 ];
 
 export function VisualMapToolbar({
   kindFilter,
   statusFilter,
   searchQuery,
-  isLocked,
-  isCompact,
-  dimModelAPIEdges,
   onToggleKind,
   onToggleStatus,
   onSearchChange,
   onReLayout,
   onFitView,
-  onToggleLock,
-  onToggleCompact,
-  onToggleDimModelAPIEdges,
+  onCreateResource,
 }: VisualMapToolbarProps) {
   return (
     <div className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2 flex-wrap">
@@ -57,28 +47,29 @@ export function VisualMapToolbar({
         />
       </div>
 
-      {/* Kind filter chips */}
+      {/* Create resource buttons */}
       <div className="flex items-center gap-1">
-        {KIND_CHIPS.map((chip) => {
-          const active = kindFilter.has(chip.kind);
-          return (
-            <button
-              key={chip.kind}
-              onClick={() => onToggleKind(chip.kind)}
-              className={`
-                text-[10px] font-medium px-2 py-1 rounded-full border transition-all duration-150
-                ${active
-                  ? 'border-border bg-card text-foreground shadow-sm'
-                  : 'border-transparent bg-muted/50 text-muted-foreground/50'
-                }
-              `}
-              style={active ? { borderLeftColor: `hsl(var(${chip.colorVar}))`, borderLeftWidth: 3 } : undefined}
-            >
-              {chip.label}
-            </button>
-          );
-        })}
+        {KIND_CHIPS.map((chip) => (
+          <Tooltip key={chip.kind}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => onCreateResource(chip.kind)}
+                className="flex items-center gap-1.5 text-[10px] font-medium px-2 py-1 rounded-full border border-border bg-card hover:bg-secondary text-foreground shadow-sm transition-all duration-150"
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: `hsl(var(${chip.colorVar}))` }}
+                />
+                <span>{chip.label}</span>
+                <Plus className="h-3 w-3 text-muted-foreground" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Create {chip.label}</TooltipContent>
+          </Tooltip>
+        ))}
       </div>
+
+      <div className="flex-1" />
 
       {/* Status filter */}
       <div className="flex items-center gap-1">
@@ -99,35 +90,43 @@ export function VisualMapToolbar({
         })}
       </div>
 
-      <div className="flex-1" />
+      {/* Kind filter toggles with colored dots */}
+      <div className="flex items-center gap-1 bg-card/90 backdrop-blur-sm rounded-lg border border-border px-1 py-0.5">
+        {KIND_CHIPS.map((chip) => {
+          const active = kindFilter.has(chip.kind);
+          return (
+            <Tooltip key={chip.kind}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => onToggleKind(chip.kind)}
+                  className={`flex items-center gap-1 px-1.5 py-1 rounded text-[10px] font-medium transition-all duration-150
+                    ${active ? 'text-foreground' : 'text-muted-foreground/30'}
+                  `}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0 transition-opacity"
+                    style={{
+                      backgroundColor: `hsl(var(${chip.colorVar}))`,
+                      opacity: active ? 1 : 0.2,
+                    }}
+                  />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{active ? `Hide ${chip.label}` : `Show ${chip.label}`}</TooltipContent>
+            </Tooltip>
+          );
+        })}
+      </div>
 
       {/* Layout controls */}
       <div className="flex items-center gap-1 bg-card/90 backdrop-blur-sm rounded-lg border border-border px-1 py-0.5">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="xs" onClick={onToggleDimModelAPIEdges} className={`h-7 w-7 p-0 ${dimModelAPIEdges ? 'text-muted-foreground' : ''}`}>
-              {dimModelAPIEdges ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{dimModelAPIEdges ? 'Show model edges' : 'Dim model edges'}</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="xs" onClick={onToggleCompact} className={`h-7 w-7 p-0 ${isCompact ? 'text-primary' : ''}`}>
-              {isCompact ? <Maximize2 className="h-3.5 w-3.5" /> : <Minimize2 className="h-3.5 w-3.5" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{isCompact ? 'Expand cards' : 'Compact pills'}</TooltipContent>
-        </Tooltip>
-
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost" size="xs" onClick={onReLayout} className="h-7 w-7 p-0">
               <LayoutGrid className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Re-layout (resets positions)</TooltipContent>
+          <TooltipContent side="bottom">Re-layout (resets positions)</TooltipContent>
         </Tooltip>
 
         <Tooltip>
@@ -136,16 +135,7 @@ export function VisualMapToolbar({
               <Maximize className="h-3.5 w-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Fit to view</TooltipContent>
-        </Tooltip>
-
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="xs" onClick={onToggleLock} className={`h-7 w-7 p-0 ${isLocked ? 'text-primary' : ''}`}>
-              {isLocked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{isLocked ? 'Unlock positions' : 'Lock positions'}</TooltipContent>
+          <TooltipContent side="bottom">Fit to view</TooltipContent>
         </Tooltip>
       </div>
     </div>

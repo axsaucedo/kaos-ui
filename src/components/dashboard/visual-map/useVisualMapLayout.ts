@@ -1,17 +1,33 @@
-import { useCallback, useRef, useState, useMemo } from 'react';
+import { useCallback, useRef, useState, useMemo, useEffect } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import { computeLayout } from './layout-engine';
 import type { ResourceNodeData } from './types';
-import type { ModelAPI, MCPServer, Agent } from '@/types/kubernetes';
+import type { ModelAPI, MCPServer, Agent, DeploymentStatusInfo } from '@/types/kubernetes';
 import { MarkerType } from '@xyflow/react';
 
-const COLUMN_ORDER = ['ModelAPI', 'MCPServer', 'Agent'] as const;
+const POSITIONS_STORAGE_KEY = 'visual-map-node-positions';
+
+/**
+ * Compute effective status from resource phase + deployment info.
+ * Mirrors the logic used in DeploymentStatusCard for rolling updates.
+ */
+function computeEffectiveStatus(resource: ModelAPI | MCPServer | Agent): string {
+  const phase = resource.status?.phase || 'Unknown';
+  const deployment = (resource.status as any)?.deployment as DeploymentStatusInfo | undefined;
+  if (!deployment) return phase;
+
+  const { replicas = 0, readyReplicas = 0, updatedReplicas = 0 } = deployment;
+  if (replicas > 0 && updatedReplicas < replicas) return 'Updating';
+  if (replicas > 0 && readyReplicas === 0) return 'Pending';
+  if (replicas > 0 && readyReplicas < replicas) return 'Progressing';
+  if (readyReplicas > 0 && readyReplicas >= replicas) return 'Ready';
+  return phase;
+}
 
 function buildGraph(
   modelAPIs: ModelAPI[],
   mcpServers: MCPServer[],
   agents: Agent[],
-  dimModelAPIEdges: boolean,
 ) {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
@@ -38,7 +54,7 @@ function buildGraph(
       position: { x: 0, y: 0 },
       data: {
         label: r.metadata.name, namespace: r.metadata.namespace,
-        status: r.status?.phase || 'Unknown', statusMessage: r.status?.message,
+        status: computeEffectiveStatus(r), statusMessage: r.status?.message,
         resourceType: 'ModelAPI', resource: r,
       } satisfies ResourceNodeData,
     });
@@ -51,7 +67,7 @@ function buildGraph(
       position: { x: 0, y: 0 },
       data: {
         label: r.metadata.name, namespace: r.metadata.namespace,
-        status: r.status?.phase || 'Unknown', statusMessage: r.status?.message,
+        status: computeEffectiveStatus(r), statusMessage: r.status?.message,
         resourceType: 'MCPServer', resource: r,
       } satisfies ResourceNodeData,
     });
@@ -65,30 +81,26 @@ function buildGraph(
       position: { x: 0, y: 0 },
       data: {
         label: agent.metadata.name, namespace: agent.metadata.namespace,
-        status: agent.status?.phase || 'Unknown', statusMessage: agent.status?.message,
+        status: computeEffectiveStatus(agent), statusMessage: agent.status?.message,
         resourceType: 'Agent', resource: agent,
       } satisfies ResourceNodeData,
     });
 
-    // ModelAPI edge — gray, toggleable visibility
+    // ModelAPI edge — gray
     if (agent.spec.modelAPI) {
       const sourceId = nodeId('ModelAPI', agent.metadata.namespace, agent.spec.modelAPI);
-      const dimmed = dimModelAPIEdges;
       edges.push({
         id: `edge-modelapi-${agent.metadata.name}`,
         source: sourceId, target: agentId, type: 'dynamic',
-        animated: !dimmed, label: 'model',
-        style: {
-          stroke: dimmed ? 'hsl(var(--muted-foreground) / 0.08)' : 'hsl(var(--modelapi-color))',
-          strokeWidth: dimmed ? 1 : 2,
-        },
-        markerEnd: { type: MarkerType.ArrowClosed, color: dimmed ? 'hsl(var(--muted-foreground) / 0.08)' : 'hsl(var(--modelapi-color))' },
-        labelStyle: { fill: 'hsl(var(--muted-foreground))', fontSize: 10, opacity: dimmed ? 0.05 : 1 },
+        animated: true, label: 'model',
+        style: { stroke: 'hsl(var(--modelapi-color))', strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--modelapi-color))' },
+        labelStyle: { fill: 'hsl(var(--muted-foreground))', fontSize: 10 },
         labelBgStyle: { fill: 'hsl(var(--card))', fillOpacity: 0.9 },
       });
     }
 
-    // MCPServer edges
+    // MCPServer edges — light blue
     agent.spec.mcpServers?.forEach((mcpName) => {
       const sourceId = nodeId('MCPServer', agent.metadata.namespace, mcpName);
       edges.push({
@@ -102,7 +114,7 @@ function buildGraph(
       });
     });
 
-    // Agent-to-agent edges (from agentNetwork.access) — purple
+    // Agent-to-agent edges — purple
     agent.spec.agentNetwork?.access?.forEach((targetAgentName: string) => {
       const targetId = nodeId('Agent', agent.metadata.namespace, targetAgentName);
       edges.push({
@@ -121,72 +133,98 @@ function buildGraph(
 }
 
 function resourceFingerprint(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agent[]): string {
-  const m = modelAPIs.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}`).sort().join(',');
-  const s = mcpServers.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}`).sort().join(',');
-  const a = agents.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}:${r.spec.modelAPI}:${r.spec.mcpServers?.sort().join('+')}:${(r.spec as any).agentNetwork?.access?.sort().join('+') ?? ''}`).sort().join(',');
+  const m = modelAPIs.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}:${(r.status as any)?.deployment?.readyReplicas ?? ''}/${(r.status as any)?.deployment?.replicas ?? ''}`).sort().join(',');
+  const s = mcpServers.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}:${(r.status as any)?.deployment?.readyReplicas ?? ''}/${(r.status as any)?.deployment?.replicas ?? ''}`).sort().join(',');
+  const a = agents.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}:${r.spec.modelAPI}:${r.spec.mcpServers?.sort().join('+')}:${r.spec.agentNetwork?.access?.sort().join('+') ?? ''}:${(r.status as any)?.deployment?.readyReplicas ?? ''}/${(r.status as any)?.deployment?.replicas ?? ''}`).sort().join(',');
   return `${m}|${s}|${a}`;
+}
+
+function loadSavedPositions(): Map<string, { x: number; y: number }> {
+  try {
+    const saved = localStorage.getItem(POSITIONS_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as Record<string, { x: number; y: number }>;
+      return new Map(Object.entries(parsed));
+    }
+  } catch { /* ignore */ }
+  return new Map();
+}
+
+function savePositions(positions: Map<string, { x: number; y: number }>) {
+  try {
+    const obj: Record<string, { x: number; y: number }> = {};
+    positions.forEach((pos, id) => { obj[id] = pos; });
+    localStorage.setItem(POSITIONS_STORAGE_KEY, JSON.stringify(obj));
+  } catch { /* ignore */ }
 }
 
 export function useVisualMapLayout(
   modelAPIs: ModelAPI[],
   mcpServers: MCPServer[],
   agents: Agent[],
-  dimModelAPIEdges: boolean = false,
 ) {
-  const lockedPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
-  const [isLocked, setIsLocked] = useState(false);
+  const lockedPositions = useRef<Map<string, { x: number; y: number }>>(loadSavedPositions());
   const prevFingerprint = useRef<string>('');
   const hasInitialized = useRef(false);
-
   const prevLayoutNodes = useRef<Node[]>([]);
+  const prevNodeIds = useRef<Set<string>>(new Set());
 
-  // Structural fingerprint — does NOT include dimModelAPIEdges
   const structuralFP = useMemo(
     () => resourceFingerprint(modelAPIs, mcpServers, agents),
     [modelAPIs, mcpServers, agents],
   );
 
-  // Layout nodes only when structure changes
-  const { initialNodes, changed } = useMemo(() => {
+  const { initialNodes, initialEdges, changed, newNodeIds } = useMemo(() => {
     const structurallyChanged = structuralFP !== prevFingerprint.current;
-    const { nodes: graphNodes, edges } = buildGraph(modelAPIs, mcpServers, agents, false);
+    const { nodes: graphNodes, edges } = buildGraph(modelAPIs, mcpServers, agents);
+
+    // Detect new nodes
+    const currentIds = new Set(graphNodes.filter(n => n.type === 'resourceNode').map(n => n.id));
+    const newIds = new Set<string>();
+    if (hasInitialized.current) {
+      currentIds.forEach(id => {
+        if (!prevNodeIds.current.has(id)) newIds.add(id);
+      });
+    }
+    prevNodeIds.current = currentIds;
 
     let layoutedNodes: Node[];
     if (structurallyChanged || !hasInitialized.current) {
       prevFingerprint.current = structuralFP;
       hasInitialized.current = true;
       layoutedNodes = computeLayout(graphNodes, edges, new Set(lockedPositions.current.keys()));
+
+      // Apply saved positions for locked nodes
+      layoutedNodes = layoutedNodes.map(node => {
+        const saved = lockedPositions.current.get(node.id);
+        if (saved) return { ...node, position: saved };
+        return node;
+      });
+
       prevLayoutNodes.current = layoutedNodes;
     } else {
       layoutedNodes = prevLayoutNodes.current;
     }
 
-    return { initialNodes: layoutedNodes, changed: structurallyChanged };
+    return { initialNodes: layoutedNodes, initialEdges: edges, changed: structurallyChanged, newNodeIds: newIds };
   }, [modelAPIs, mcpServers, agents, structuralFP]);
-
-  // Always rebuild edges (they depend on dimModelAPIEdges which changes independently)
-  const initialEdges = useMemo(() => {
-    const { edges } = buildGraph(modelAPIs, mcpServers, agents, dimModelAPIEdges);
-    return edges;
-  }, [modelAPIs, mcpServers, agents, dimModelAPIEdges]);
 
   const handleNodeDragStop = useCallback((_: any, node: Node) => {
     lockedPositions.current.set(node.id, { ...node.position });
+    savePositions(lockedPositions.current);
   }, []);
 
   const reLayout = useCallback((currentNodes: Node[], currentEdges: Edge[]): Node[] => {
     lockedPositions.current.clear();
+    savePositions(lockedPositions.current);
     return computeLayout(currentNodes, currentEdges, new Set());
   }, []);
-
-  const toggleLock = useCallback(() => setIsLocked((prev) => !prev), []);
 
   return {
     initialNodes,
     initialEdges,
     changed,
-    isLocked,
-    toggleLock,
+    newNodeIds,
     handleNodeDragStop,
     reLayout,
   };
