@@ -1,7 +1,7 @@
 import React, { createContext, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Handle, Position } from '@xyflow/react';
-import { Box, Server, Bot, Info, MessageSquare, Brain, Wrench, Stethoscope, AlertTriangle } from 'lucide-react';
+import { Box, Server, Bot, Info, MessageSquare, Brain, Wrench, Stethoscope, AlertTriangle, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import type { ResourceNodeData, ResourceKind } from './types';
@@ -79,7 +79,7 @@ function hasWarning(statusMessage?: string): boolean {
   return lower.includes('error') || lower.includes('warning') || lower.includes('fail') || lower.includes('crash');
 }
 
-export function ResourceNode({ data }: { data: ResourceNodeData }) {
+export function ResourceNode({ data, onEdit }: { data: ResourceNodeData; onEdit?: (data: ResourceNodeData) => void }) {
   const navigate = useNavigate();
   const zoom = useContext(VisualMapZoomContext);
   const isCompact = useContext(VisualMapCompactContext);
@@ -93,6 +93,10 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
   const handleQuickAction = (tab: string, e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(tab === 'overview' ? basePath : `${basePath}?tab=${tab}`);
+  };
+  const handleEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onEdit?.(data);
   };
 
   const statusDot = getStatusDotColor(data.status);
@@ -152,7 +156,7 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
 
         <div className="flex items-center gap-2.5 mb-1.5">
           <Icon className="h-4 w-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-          <span className="text-sm font-semibold text-foreground truncate">{data.label}</span>
+          <span className="text-sm font-semibold text-foreground truncate flex-1">{data.label}</span>
         </div>
 
         <div className="flex items-center justify-between gap-2 mb-2">
@@ -189,6 +193,18 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
               </Tooltip>
             );
           })}
+          <div className="flex-1" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                onClick={handleEdit}
+                className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="text-xs">Edit</TooltipContent>
+          </Tooltip>
         </div>
       </div>
     </>

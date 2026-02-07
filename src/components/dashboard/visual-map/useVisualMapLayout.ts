@@ -70,24 +70,25 @@ function buildGraph(
       } satisfies ResourceNodeData,
     });
 
-    // ModelAPI edge — gray, toggleable opacity
+    // ModelAPI edge — gray, toggleable visibility
     if (agent.spec.modelAPI) {
       const sourceId = nodeId('ModelAPI', agent.metadata.namespace, agent.spec.modelAPI);
+      const dimmed = dimModelAPIEdges;
       edges.push({
         id: `edge-modelapi-${agent.metadata.name}`,
         source: sourceId, target: agentId, type: 'dynamic',
-        animated: !dimModelAPIEdges, label: 'model',
+        animated: !dimmed, label: 'model',
         style: {
-          stroke: dimModelAPIEdges ? 'hsl(var(--muted-foreground) / 0.25)' : 'hsl(var(--muted-foreground) / 0.6)',
-          strokeWidth: dimModelAPIEdges ? 1 : 2,
+          stroke: dimmed ? 'hsl(var(--muted-foreground) / 0.08)' : 'hsl(var(--modelapi-color))',
+          strokeWidth: dimmed ? 1 : 2,
         },
-        markerEnd: { type: MarkerType.ArrowClosed, color: dimModelAPIEdges ? 'hsl(var(--muted-foreground) / 0.25)' : 'hsl(var(--muted-foreground) / 0.6)' },
-        labelStyle: { fill: 'hsl(var(--muted-foreground))', fontSize: 10, opacity: dimModelAPIEdges ? 0.3 : 1 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: dimmed ? 'hsl(var(--muted-foreground) / 0.08)' : 'hsl(var(--modelapi-color))' },
+        labelStyle: { fill: 'hsl(var(--muted-foreground))', fontSize: 10, opacity: dimmed ? 0.05 : 1 },
         labelBgStyle: { fill: 'hsl(var(--card))', fillOpacity: 0.9 },
       });
     }
 
-    // MCPServer edges — keep colored
+    // MCPServer edges
     agent.spec.mcpServers?.forEach((mcpName) => {
       const sourceId = nodeId('MCPServer', agent.metadata.namespace, mcpName);
       edges.push({
@@ -101,8 +102,8 @@ function buildGraph(
       });
     });
 
-    // Agent-to-agent edges (from agentNetwork.access)
-    (agent.spec as any).agentNetwork?.access?.forEach((targetAgentName: string) => {
+    // Agent-to-agent edges (from agentNetwork.access) — purple
+    agent.spec.agentNetwork?.access?.forEach((targetAgentName: string) => {
       const targetId = nodeId('Agent', agent.metadata.namespace, targetAgentName);
       edges.push({
         id: `edge-a2a-${agent.metadata.name}-${targetAgentName}`,
@@ -139,17 +140,20 @@ export function useVisualMapLayout(
 
   const prevLayoutNodes = useRef<Node[]>([]);
 
-  const { initialNodes, initialEdges, changed } = useMemo(() => {
-    const fp = resourceFingerprint(modelAPIs, mcpServers, agents);
-    const structurallyChanged = fp !== prevFingerprint.current;
+  // Structural fingerprint — does NOT include dimModelAPIEdges
+  const structuralFP = useMemo(
+    () => resourceFingerprint(modelAPIs, mcpServers, agents),
+    [modelAPIs, mcpServers, agents],
+  );
 
-    // Always rebuild edges (they depend on dimModelAPIEdges)
-    const { nodes: graphNodes, edges } = buildGraph(modelAPIs, mcpServers, agents, dimModelAPIEdges);
+  // Layout nodes only when structure changes
+  const { initialNodes, changed } = useMemo(() => {
+    const structurallyChanged = structuralFP !== prevFingerprint.current;
+    const { nodes: graphNodes, edges } = buildGraph(modelAPIs, mcpServers, agents, false);
 
-    // Only re-layout nodes when structure changes
     let layoutedNodes: Node[];
     if (structurallyChanged || !hasInitialized.current) {
-      prevFingerprint.current = fp;
+      prevFingerprint.current = structuralFP;
       hasInitialized.current = true;
       layoutedNodes = computeLayout(graphNodes, edges, new Set(lockedPositions.current.keys()));
       prevLayoutNodes.current = layoutedNodes;
@@ -157,7 +161,13 @@ export function useVisualMapLayout(
       layoutedNodes = prevLayoutNodes.current;
     }
 
-    return { initialNodes: layoutedNodes, initialEdges: edges, changed: structurallyChanged };
+    return { initialNodes: layoutedNodes, changed: structurallyChanged };
+  }, [modelAPIs, mcpServers, agents, structuralFP]);
+
+  // Always rebuild edges (they depend on dimModelAPIEdges which changes independently)
+  const initialEdges = useMemo(() => {
+    const { edges } = buildGraph(modelAPIs, mcpServers, agents, dimModelAPIEdges);
+    return edges;
   }, [modelAPIs, mcpServers, agents, dimModelAPIEdges]);
 
   const handleNodeDragStop = useCallback((_: any, node: Node) => {

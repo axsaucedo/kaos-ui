@@ -16,6 +16,7 @@ export interface ResourceNodeData {
 export interface ColumnHeaderData {
   label: string;
   count: number;
+  onAdd?: () => void;
 }
 
 export interface VisualMapFilterState {

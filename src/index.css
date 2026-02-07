@@ -52,9 +52,9 @@
     --connection-line: 221 83% 53%;
     
     /* Resource type colors */
-    --modelapi-color: 280 70% 60%;
-    --mcpserver-color: 142 70% 50%;
-    --agent-color: 38 90% 55%;
+    --modelapi-color: 220 10% 50%;
+    --mcpserver-color: 200 80% 55%;
+    --agent-color: 270 70% 60%;
     --pod-color: 210 80% 55%;
     --deployment-color: 340 75% 55%;
     --volume-color: 25 85% 55%;
