@@ -100,6 +100,20 @@ function buildGraph(
         labelBgStyle: { fill: 'hsl(var(--card))', fillOpacity: 0.9 },
       });
     });
+
+    // Agent-to-agent edges (from agentNetwork.access)
+    (agent.spec as any).agentNetwork?.access?.forEach((targetAgentName: string) => {
+      const targetId = nodeId('Agent', agent.metadata.namespace, targetAgentName);
+      edges.push({
+        id: `edge-a2a-${agent.metadata.name}-${targetAgentName}`,
+        source: agentId, target: targetId, type: 'dynamic',
+        animated: true, label: 'a2a',
+        style: { stroke: 'hsl(var(--agent-color))', strokeWidth: 2 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--agent-color))' },
+        labelStyle: { fill: 'hsl(var(--muted-foreground))', fontSize: 10 },
+        labelBgStyle: { fill: 'hsl(var(--card))', fillOpacity: 0.9 },
+      });
+    });
   });
 
   return { nodes, edges };
@@ -108,7 +122,7 @@ function buildGraph(
 function resourceFingerprint(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agent[]): string {
   const m = modelAPIs.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}`).sort().join(',');
   const s = mcpServers.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}`).sort().join(',');
-  const a = agents.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}:${r.spec.modelAPI}:${r.spec.mcpServers?.sort().join('+')}`).sort().join(',');
+  const a = agents.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}:${r.spec.modelAPI}:${r.spec.mcpServers?.sort().join('+')}:${(r.spec as any).agentNetwork?.access?.sort().join('+') ?? ''}`).sort().join(',');
   return `${m}|${s}|${a}`;
 }
 
@@ -123,19 +137,27 @@ export function useVisualMapLayout(
   const prevFingerprint = useRef<string>('');
   const hasInitialized = useRef(false);
 
+  const prevLayoutNodes = useRef<Node[]>([]);
+
   const { initialNodes, initialEdges, changed } = useMemo(() => {
     const fp = resourceFingerprint(modelAPIs, mcpServers, agents);
     const structurallyChanged = fp !== prevFingerprint.current;
-    prevFingerprint.current = fp;
 
-    if (!structurallyChanged && hasInitialized.current) {
-      return { initialNodes: [] as Node[], initialEdges: [] as Edge[], changed: false };
+    // Always rebuild edges (they depend on dimModelAPIEdges)
+    const { nodes: graphNodes, edges } = buildGraph(modelAPIs, mcpServers, agents, dimModelAPIEdges);
+
+    // Only re-layout nodes when structure changes
+    let layoutedNodes: Node[];
+    if (structurallyChanged || !hasInitialized.current) {
+      prevFingerprint.current = fp;
+      hasInitialized.current = true;
+      layoutedNodes = computeLayout(graphNodes, edges, new Set(lockedPositions.current.keys()));
+      prevLayoutNodes.current = layoutedNodes;
+    } else {
+      layoutedNodes = prevLayoutNodes.current;
     }
 
-    hasInitialized.current = true;
-    const { nodes, edges } = buildGraph(modelAPIs, mcpServers, agents, dimModelAPIEdges);
-    const layouted = computeLayout(nodes, edges, new Set(lockedPositions.current.keys()));
-    return { initialNodes: layouted, initialEdges: edges, changed: true };
+    return { initialNodes: layoutedNodes, initialEdges: edges, changed: structurallyChanged };
   }, [modelAPIs, mcpServers, agents, dimModelAPIEdges]);
 
   const handleNodeDragStop = useCallback((_: any, node: Node) => {

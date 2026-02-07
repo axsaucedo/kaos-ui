@@ -163,8 +163,8 @@ export function computeLayout(
   // Sort clusters: largest first for visual prominence
   clusters.sort((a, b) => b.size - a.size);
 
-  // Track Y offset per column for stacking clusters
-  const columnYOffset = new Map<number, number>();
+  // Track global Y offset to prevent disconnected clusters from overlapping
+  let globalYOffset = 0;
 
   // Position nodes cluster by cluster
   const positioned = new Map<string, { x: number; y: number }>();
@@ -193,25 +193,21 @@ export function computeLayout(
       if (h > maxClusterHeight) maxClusterHeight = h;
     });
 
-    // Position each column's nodes within this cluster
+    // Position each column's nodes within this cluster, starting at globalYOffset
     clusterByCol.forEach((colNodes, col) => {
-      const startY = columnYOffset.get(col) ?? 0;
       colNodes.forEach((node, i) => {
         if (!lockedNodeIds.has(node.id)) {
           positioned.set(node.id, {
             x: colX(col),
-            y: startY + i * (NODE_HEIGHT + nodeSep),
+            y: globalYOffset + i * (NODE_HEIGHT + nodeSep),
           });
         }
       });
     });
 
-    // Advance Y offset for all columns that participated, using the max cluster height + gap
+    // Advance global Y offset by the tallest column in this cluster + gap
     const clusterGap = nodeSep * 1.5;
-    clusterByCol.forEach((_, col) => {
-      const currentY = columnYOffset.get(col) ?? 0;
-      columnYOffset.set(col, currentY + maxClusterHeight + clusterGap);
-    });
+    globalYOffset += maxClusterHeight + clusterGap;
   });
 
   // Also position any orphan nodes (no edges, not in any cluster with others)
@@ -223,9 +219,8 @@ export function computeLayout(
     else if (rt === 'MCPServer') col = mcpServerCol;
     else col = agentBaseCol + (agentDepths.get(node.id) ?? 0);
 
-    const startY = columnYOffset.get(col) ?? 0;
-    positioned.set(node.id, { x: colX(col), y: startY });
-    columnYOffset.set(col, startY + NODE_HEIGHT + nodeSep);
+    positioned.set(node.id, { x: colX(col), y: globalYOffset });
+    globalYOffset += NODE_HEIGHT + nodeSep;
   });
 
   const layoutedResourceNodes = resourceNodes.map((node) => {
