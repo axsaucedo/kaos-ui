@@ -177,34 +177,34 @@ export function ResourceNode({ data, onEdit }: { data: ResourceNodeData; onEdit?
           </div>
         )}
 
-        <div className="flex items-center gap-1 mt-1.5 border-t border-border/50 pt-1.5">
+        <div className="flex items-center gap-1.5 mt-1.5 border-t border-border/50 pt-1.5">
           {config.quickActions.map((qa) => {
             const QAIcon = ICON_MAP[qa.icon];
             return (
-              <Tooltip key={qa.tab}>
+              <Tooltip key={qa.tab} delayDuration={600}>
                 <TooltipTrigger asChild>
                   <button
                     onClick={(e) => handleQuickAction(qa.tab, e)}
-                    className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                    className="p-1.5 rounded text-muted-foreground transition-all duration-200 hover:scale-150 hover:text-foreground hover:bg-primary/15 hover:shadow-[0_0_8px_hsl(var(--primary)/0.4)]"
                   >
                     <QAIcon className="h-3.5 w-3.5" />
                   </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">{qa.label}</TooltipContent>
+                <TooltipContent side="bottom" className="text-sm px-3 py-1.5 font-medium">{qa.label}</TooltipContent>
               </Tooltip>
             );
           })}
           <div className="flex-1" />
-          <Tooltip>
+          <Tooltip delayDuration={600}>
             <TooltipTrigger asChild>
               <button
                 onClick={handleEdit}
-                className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors opacity-0 group-hover:opacity-100"
+                className="p-1.5 rounded text-muted-foreground transition-all duration-200 hover:scale-150 hover:text-foreground hover:bg-primary/15 hover:shadow-[0_0_8px_hsl(var(--primary)/0.4)] opacity-0 group-hover:opacity-100"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
             </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">Edit</TooltipContent>
+            <TooltipContent side="bottom" className="text-sm px-3 py-1.5 font-medium">Edit</TooltipContent>
           </Tooltip>
         </div>
       </div>
