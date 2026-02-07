@@ -194,7 +194,7 @@ test.describe('MCPServer Tools Functionality', () => {
     await page.waitForTimeout(3000);
     
     // Try to find and click on a tool (e.g., 'calculate')
-    const calculateTool = page.locator('text=calculate').first();
+    const calculateTool = page.locator('button:has-text("calculate")').first();
     if (!await calculateTool.isVisible({ timeout: 5000 })) {
       console.log('Calculate tool not visible, MCP may not be initialized');
       // Check if there's an initialize button
@@ -205,6 +205,12 @@ test.describe('MCPServer Tools Functionality', () => {
       }
     }
     
+    // Click to expand the calculate tool
+    if (await calculateTool.isVisible()) {
+      await calculateTool.click();
+      await page.waitForTimeout(500);
+    }
+    
     // Click on Select Tool button if visible
     const selectButton = page.getByRole('button', { name: /select tool/i });
     if (await selectButton.isVisible({ timeout: 2000 })) {
@@ -213,7 +219,7 @@ test.describe('MCPServer Tools Functionality', () => {
     }
     
     // Look for parameter input (for calculate: expression)
-    const expressionInput = page.locator('input[name="expression"], input[placeholder*="expression"], textarea').first();
+    const expressionInput = page.locator('input#expression, input[name="expression"], input[placeholder*="expression"], textarea').first();
     
     if (await expressionInput.isVisible({ timeout: 3000 })) {
       await expressionInput.fill('5 + 3');
