@@ -16,7 +16,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Bot } from 'lucide-react';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
-import { ResourceNode, VisualMapZoomContext } from './ResourceNode';
+import { ResourceNode, VisualMapZoomContext, VisualMapDirectionContext } from './ResourceNode';
 import { ColumnHeaderNode } from './ColumnHeaderNode';
 import { VisualMapToolbar } from './VisualMapToolbar';
 import { VisualMapContextMenu } from './VisualMapContextMenu';
@@ -60,10 +60,13 @@ function VisualMapInner() {
   const {
     initialNodes,
     initialEdges,
+    changed,
     isLocked,
+    direction,
     toggleLock,
     handleNodeDragStop,
     reLayout,
+    changeDirection,
   } = useVisualMapLayout(modelAPIs, mcpServers, agents);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -71,29 +74,24 @@ function VisualMapInner() {
 
   const { fitView } = useReactFlow();
 
-  // Sync when store data changes
+  // Only sync nodes/edges when there's an actual structural change
   useEffect(() => {
-    setNodes(initialNodes);
-    setEdges(initialEdges);
-  }, [initialNodes, initialEdges, setNodes, setEdges]);
+    if (changed) {
+      setNodes(initialNodes);
+      setEdges(initialEdges);
+    }
+  }, [initialNodes, initialEdges, changed, setNodes, setEdges]);
 
   // Track zoom
   useOnViewportChange({
     onChange: useCallback((vp: Viewport) => setZoom(vp.zoom), []),
   });
 
-  // Filter/search
   const {
-    kindFilter,
-    statusFilter,
-    searchQuery,
-    toggleKind,
-    toggleStatus,
-    setSearchQuery,
-    applyFilters,
+    kindFilter, statusFilter, searchQuery,
+    toggleKind, toggleStatus, setSearchQuery, applyFilters,
   } = useVisualMapFilters();
 
-  // Apply filters to nodes/edges
   const { nodes: displayNodes, edges: displayEdges } = useMemo(
     () => applyFilters(nodes, edges),
     [nodes, edges, applyFilters],
@@ -122,57 +120,60 @@ function VisualMapInner() {
 
   return (
     <VisualMapZoomContext.Provider value={zoom}>
-      <TooltipProvider delayDuration={200}>
-        <div className="h-[calc(100vh-140px)] w-full rounded-xl border border-border bg-card overflow-hidden relative">
-          <VisualMapToolbar
-            kindFilter={kindFilter}
-            statusFilter={statusFilter}
-            searchQuery={searchQuery}
-            isLocked={isLocked}
-            onToggleKind={toggleKind}
-            onToggleStatus={toggleStatus}
-            onSearchChange={setSearchQuery}
-            onReLayout={handleReLayout}
-            onFitView={handleFitView}
-            onToggleLock={toggleLock}
-          />
-
-          <ReactFlow
-            nodes={displayNodes}
-            edges={displayEdges}
-            onNodesChange={isLocked ? undefined : onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onNodeDragStop={handleNodeDragStop}
-            nodeTypes={nodeTypes}
-            nodesDraggable={!isLocked}
-            fitView
-            fitViewOptions={{ padding: 0.3 }}
-            proOptions={{ hideAttribution: true }}
-            minZoom={0.3}
-            maxZoom={2}
-            defaultEdgeOptions={{ type: 'smoothstep', animated: true }}
-          >
-            <Background gap={20} size={1} className="!bg-background" />
-            <Controls className="!bg-card !border-border !shadow-sm [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground" />
-            <MiniMap
-              nodeColor={(node) => {
-                const rt = (node.data as unknown as ResourceNodeData)?.resourceType;
-                if (rt === 'ModelAPI') return 'hsl(var(--modelapi-color))';
-                if (rt === 'MCPServer') return 'hsl(var(--mcpserver-color))';
-                if (rt === 'Agent') return 'hsl(var(--agent-color))';
-                return 'hsl(var(--muted-foreground))';
-              }}
-              className="!bg-card !border-border"
-              maskColor="hsl(var(--background) / 0.7)"
+      <VisualMapDirectionContext.Provider value={direction}>
+        <TooltipProvider delayDuration={200}>
+          <div className="h-[calc(100vh-140px)] w-full rounded-xl border border-border bg-card overflow-hidden relative">
+            <VisualMapToolbar
+              kindFilter={kindFilter}
+              statusFilter={statusFilter}
+              searchQuery={searchQuery}
+              isLocked={isLocked}
+              direction={direction}
+              onToggleKind={toggleKind}
+              onToggleStatus={toggleStatus}
+              onSearchChange={setSearchQuery}
+              onReLayout={handleReLayout}
+              onFitView={handleFitView}
+              onToggleLock={toggleLock}
+              onChangeDirection={changeDirection}
             />
-          </ReactFlow>
-        </div>
-      </TooltipProvider>
+
+            <ReactFlow
+              nodes={displayNodes}
+              edges={displayEdges}
+              onNodesChange={isLocked ? undefined : onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onNodeDragStop={handleNodeDragStop}
+              nodeTypes={nodeTypes}
+              nodesDraggable={!isLocked}
+              fitView
+              fitViewOptions={{ padding: 0.3 }}
+              proOptions={{ hideAttribution: true }}
+              minZoom={0.3}
+              maxZoom={2}
+              defaultEdgeOptions={{ type: 'smoothstep', animated: true }}
+            >
+              <Background gap={20} size={1} className="!bg-background" />
+              <Controls className="!bg-card !border-border !shadow-sm [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground" />
+              <MiniMap
+                nodeColor={(node) => {
+                  const rt = (node.data as unknown as ResourceNodeData)?.resourceType;
+                  if (rt === 'ModelAPI') return 'hsl(var(--modelapi-color))';
+                  if (rt === 'MCPServer') return 'hsl(var(--mcpserver-color))';
+                  if (rt === 'Agent') return 'hsl(var(--agent-color))';
+                  return 'hsl(var(--muted-foreground))';
+                }}
+                className="!bg-card !border-border"
+                maskColor="hsl(var(--background) / 0.7)"
+              />
+            </ReactFlow>
+          </div>
+        </TooltipProvider>
+      </VisualMapDirectionContext.Provider>
     </VisualMapZoomContext.Provider>
   );
 }
 
-// ── Exported component with provider ──
 export function VisualMapEnhanced() {
   return (
     <ReactFlowProvider>

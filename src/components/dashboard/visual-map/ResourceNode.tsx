@@ -4,12 +4,12 @@ import { Handle, Position } from '@xyflow/react';
 import { Box, Server, Bot, Info, MessageSquare, Brain, Wrench, Stethoscope, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import type { ResourceNodeData, ResourceKind } from './types';
+import type { ResourceNodeData, ResourceKind, LayoutDirection } from './types';
 import { RESOURCE_ROUTES } from './types';
 
-// Re-exported from index.tsx but we accept it as a prop via context
-// This avoids circular imports - the context is created in index.tsx and imported here
+// Context for zoom level + layout direction
 export const VisualMapZoomContext = createContext<number>(1);
+export const VisualMapDirectionContext = createContext<LayoutDirection>('LR');
 
 const ICON_MAP = { Box, Server, Bot, Info, MessageSquare, Brain, Wrench, Stethoscope };
 
@@ -79,14 +79,26 @@ function hasWarning(statusMessage?: string): boolean {
   return lower.includes('error') || lower.includes('warning') || lower.includes('fail') || lower.includes('crash');
 }
 
+/** Get handle positions based on layout direction */
+function getHandlePositions(dir: LayoutDirection): { source: Position; target: Position } {
+  switch (dir) {
+    case 'LR': return { source: Position.Right, target: Position.Left };
+    case 'RL': return { source: Position.Left, target: Position.Right };
+    case 'TB': return { source: Position.Bottom, target: Position.Top };
+    case 'BT': return { source: Position.Top, target: Position.Bottom };
+  }
+}
+
 export function ResourceNode({ data }: { data: ResourceNodeData }) {
   const navigate = useNavigate();
   const zoom = useContext(VisualMapZoomContext);
+  const direction = useContext(VisualMapDirectionContext);
   const config = RESOURCE_CONFIG[data.resourceType];
   const Icon = config.icon;
   const route = RESOURCE_ROUTES[data.resourceType];
   const { namespace, name } = data.resource.metadata;
   const basePath = `/${route}/${namespace}/${name}`;
+  const { source: sourcePos, target: targetPos } = getHandlePositions(direction);
 
   const handleClick = () => navigate(basePath);
   const handleQuickAction = (tab: string, e: React.MouseEvent) => {
@@ -97,24 +109,25 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
   const statusDot = getStatusDotColor(data.status);
   const showWarning = hasWarning(data.statusMessage);
 
-  // ── Compact pill (zoom < 0.6) ──
+  // ── Compact pill (zoom < 0.6) — now includes name ──
   if (zoom < 0.6) {
     return (
       <>
-        <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+        <Handle type="target" position={targetPos} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
         <div
           onClick={handleClick}
           className={`
-            flex items-center gap-2 bg-card border border-border rounded-full px-3 py-2
+            flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1.5
             border-l-4 ${config.colorClass}
             shadow-sm hover:shadow-md hover:border-primary/30
             transition-all duration-200 cursor-pointer
           `}
         >
-          <Icon className="h-4 w-4 text-muted-foreground" />
-          <div className={`w-2.5 h-2.5 rounded-full ${statusDot}`} />
+          <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-[10px] font-medium text-foreground truncate max-w-[100px]">{data.label}</span>
+          <div className={`w-2 h-2 rounded-full ${statusDot} shrink-0`} />
         </div>
-        <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+        <Handle type="source" position={sourcePos} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
       </>
     );
   }
@@ -122,7 +135,7 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
   // ── Full card (zoom >= 0.6) ──
   return (
     <>
-      <Handle type="target" position={Position.Left} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+      <Handle type="target" position={targetPos} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
       <div
         onClick={handleClick}
         className={`
@@ -183,7 +196,7 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
           })}
         </div>
       </div>
-      <Handle type="source" position={Position.Right} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+      <Handle type="source" position={sourcePos} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
     </>
   );
 }

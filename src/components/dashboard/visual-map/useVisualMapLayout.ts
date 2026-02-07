@@ -1,14 +1,13 @@
 import { useCallback, useRef, useState, useMemo } from 'react';
-import type { Node, Edge, NodeChange } from '@xyflow/react';
-import { applyNodeChanges } from '@xyflow/react';
-import { computeDagreLayout } from './layout-engine';
-import type { ResourceNodeData } from './types';
+import type { Node, Edge } from '@xyflow/react';
+import { computeLayout } from './layout-engine';
+import type { ResourceNodeData, LayoutDirection } from './types';
 import type { ModelAPI, MCPServer, Agent } from '@/types/kubernetes';
 import { MarkerType } from '@xyflow/react';
 
 const ROW_SPACING = 140;
 
-function buildInitialGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agent[]) {
+function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agent[]) {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   const nodeId = (kind: string, ns: string, name: string) => `${kind}/${ns}/${name}`;
@@ -26,41 +25,32 @@ function buildInitialGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agent
     });
   });
 
-  // ModelAPI nodes
   modelAPIs.forEach((r, i) => {
     nodes.push({
       id: nodeId('ModelAPI', r.metadata.namespace, r.metadata.name),
       type: 'resourceNode',
       position: { x: 0, y: i * ROW_SPACING },
       data: {
-        label: r.metadata.name,
-        namespace: r.metadata.namespace,
-        status: r.status?.phase || 'Unknown',
-        statusMessage: r.status?.message,
-        resourceType: 'ModelAPI',
-        resource: r,
+        label: r.metadata.name, namespace: r.metadata.namespace,
+        status: r.status?.phase || 'Unknown', statusMessage: r.status?.message,
+        resourceType: 'ModelAPI', resource: r,
       } satisfies ResourceNodeData,
     });
   });
 
-  // MCPServer nodes
   mcpServers.forEach((r, i) => {
     nodes.push({
       id: nodeId('MCPServer', r.metadata.namespace, r.metadata.name),
       type: 'resourceNode',
       position: { x: 450, y: i * ROW_SPACING },
       data: {
-        label: r.metadata.name,
-        namespace: r.metadata.namespace,
-        status: r.status?.phase || 'Unknown',
-        statusMessage: r.status?.message,
-        resourceType: 'MCPServer',
-        resource: r,
+        label: r.metadata.name, namespace: r.metadata.namespace,
+        status: r.status?.phase || 'Unknown', statusMessage: r.status?.message,
+        resourceType: 'MCPServer', resource: r,
       } satisfies ResourceNodeData,
     });
   });
 
-  // Agent nodes + edges
   agents.forEach((agent, i) => {
     const agentId = nodeId('Agent', agent.metadata.namespace, agent.metadata.name);
     nodes.push({
@@ -68,26 +58,19 @@ function buildInitialGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agent
       type: 'resourceNode',
       position: { x: 900, y: i * ROW_SPACING },
       data: {
-        label: agent.metadata.name,
-        namespace: agent.metadata.namespace,
-        status: agent.status?.phase || 'Unknown',
-        statusMessage: agent.status?.message,
-        resourceType: 'Agent',
-        resource: agent,
+        label: agent.metadata.name, namespace: agent.metadata.namespace,
+        status: agent.status?.phase || 'Unknown', statusMessage: agent.status?.message,
+        resourceType: 'Agent', resource: agent,
       } satisfies ResourceNodeData,
     });
 
-    // Edge: ModelAPI → Agent
     if (agent.spec.modelAPI) {
       const sourceId = nodeId('ModelAPI', agent.metadata.namespace, agent.spec.modelAPI);
       const sourceReady = modelAPIs.find(m => m.metadata.name === agent.spec.modelAPI && m.metadata.namespace === agent.metadata.namespace)?.status?.phase?.toLowerCase() === 'ready';
       edges.push({
         id: `edge-modelapi-${agent.metadata.name}`,
-        source: sourceId,
-        target: agentId,
-        type: 'smoothstep',
-        animated: sourceReady !== false,
-        label: 'model',
+        source: sourceId, target: agentId, type: 'smoothstep',
+        animated: sourceReady !== false, label: 'model',
         style: { stroke: 'hsl(var(--modelapi-color))', strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--modelapi-color))' },
         labelStyle: { fill: 'hsl(var(--muted-foreground))', fontSize: 10 },
@@ -95,17 +78,13 @@ function buildInitialGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agent
       });
     }
 
-    // Edges: MCPServer → Agent
     agent.spec.mcpServers?.forEach((mcpName) => {
       const sourceId = nodeId('MCPServer', agent.metadata.namespace, mcpName);
       const sourceReady = mcpServers.find(m => m.metadata.name === mcpName && m.metadata.namespace === agent.metadata.namespace)?.status?.phase?.toLowerCase() === 'ready';
       edges.push({
         id: `edge-mcp-${mcpName}-${agent.metadata.name}`,
-        source: sourceId,
-        target: agentId,
-        type: 'smoothstep',
-        animated: sourceReady !== false,
-        label: 'tools',
+        source: sourceId, target: agentId, type: 'smoothstep',
+        animated: sourceReady !== false, label: 'tools',
         style: { stroke: 'hsl(var(--mcpserver-color))', strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--mcpserver-color))' },
         labelStyle: { fill: 'hsl(var(--muted-foreground))', fontSize: 10 },
@@ -117,6 +96,17 @@ function buildInitialGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agent
   return { nodes, edges };
 }
 
+/**
+ * Serialize resource lists into a stable string for comparison.
+ * Only includes fields that matter for graph structure (names, specs, status phases).
+ */
+function resourceFingerprint(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agent[]): string {
+  const m = modelAPIs.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}`).sort().join(',');
+  const s = mcpServers.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}`).sort().join(',');
+  const a = agents.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}:${r.spec.modelAPI}:${r.spec.mcpServers?.sort().join('+')}`).sort().join(',');
+  return `${m}|${s}|${a}`;
+}
+
 export function useVisualMapLayout(
   modelAPIs: ModelAPI[],
   mcpServers: MCPServer[],
@@ -124,34 +114,52 @@ export function useVisualMapLayout(
 ) {
   const lockedPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const [isLocked, setIsLocked] = useState(false);
+  const [direction, setDirection] = useState<LayoutDirection>('LR');
+  const prevFingerprint = useRef<string>('');
+  const hasInitialized = useRef(false);
 
-  // Build initial nodes/edges from store data
-  const { initialNodes, initialEdges } = useMemo(() => {
-    const { nodes, edges } = buildInitialGraph(modelAPIs, mcpServers, agents);
-    // Apply dagre layout on initial build
-    const layouted = computeDagreLayout(nodes, edges, new Set(lockedPositions.current.keys()));
-    return { initialNodes: layouted, initialEdges: edges };
-  }, [modelAPIs, mcpServers, agents]);
+  // Only recompute graph when resources actually change structurally
+  const { initialNodes, initialEdges, changed } = useMemo(() => {
+    const fp = resourceFingerprint(modelAPIs, mcpServers, agents);
+    const structurallyChanged = fp !== prevFingerprint.current;
+    prevFingerprint.current = fp;
 
-  // Track dragged nodes → lock their positions
+    if (!structurallyChanged && hasInitialized.current) {
+      // Data refresh without structural change — return empty to signal no update needed
+      return { initialNodes: [] as Node[], initialEdges: [] as Edge[], changed: false };
+    }
+
+    hasInitialized.current = true;
+    const { nodes, edges } = buildGraph(modelAPIs, mcpServers, agents);
+    const layouted = computeLayout(nodes, edges, new Set(lockedPositions.current.keys()), { direction });
+    return { initialNodes: layouted, initialEdges: edges, changed: true };
+  }, [modelAPIs, mcpServers, agents, direction]);
+
   const handleNodeDragStop = useCallback((_: any, node: Node) => {
     lockedPositions.current.set(node.id, { ...node.position });
   }, []);
 
-  // Re-layout: clear all locks and re-run dagre
   const reLayout = useCallback((currentNodes: Node[], currentEdges: Edge[]): Node[] => {
     lockedPositions.current.clear();
-    return computeDagreLayout(currentNodes, currentEdges);
-  }, []);
+    return computeLayout(currentNodes, currentEdges, new Set(), { direction });
+  }, [direction]);
 
   const toggleLock = useCallback(() => setIsLocked((prev) => !prev), []);
+
+  const changeDirection = useCallback((dir: LayoutDirection) => {
+    setDirection(dir);
+    lockedPositions.current.clear();
+  }, []);
 
   return {
     initialNodes,
     initialEdges,
+    changed,
     isLocked,
+    direction,
     toggleLock,
     handleNodeDragStop,
     reLayout,
+    changeDirection,
   };
 }
