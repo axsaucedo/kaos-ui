@@ -193,17 +193,58 @@ export function computeLayout(
       if (h > maxClusterHeight) maxClusterHeight = h;
     });
 
-    // Position each column's nodes within this cluster, starting at globalYOffset
-    clusterByCol.forEach((colNodes, col) => {
+    // Sort nodes within each column to align connected nodes on the same row
+    // Build a mapping of which row each agent is in, so MCPServers can align
+    const agentRowMap = new Map<string, number>();
+
+    // First pass: position agents (they define the row structure)
+    const agentCols = Array.from(clusterByCol.entries()).filter(([col]) => col !== 0 && col !== mcpServerCol);
+    agentCols.forEach(([col, colNodes]) => {
       colNodes.forEach((node, i) => {
         if (!lockedNodeIds.has(node.id)) {
-          positioned.set(node.id, {
-            x: colX(col),
-            y: globalYOffset + i * (NODE_HEIGHT + nodeSep),
-          });
+          const y = globalYOffset + i * (NODE_HEIGHT + nodeSep);
+          positioned.set(node.id, { x: colX(col), y });
+          agentRowMap.set(node.id, y);
         }
       });
     });
+
+    // Second pass: position ModelAPIs aligned to their connected agents
+    const modelAPICol = clusterByCol.get(0);
+    if (modelAPICol) {
+      modelAPICol.forEach((node, i) => {
+        if (lockedNodeIds.has(node.id)) return;
+        // Find connected agents and average their Y
+        const connectedAgentYs: number[] = [];
+        edges.forEach(e => {
+          if (e.source === node.id && agentRowMap.has(e.target)) {
+            connectedAgentYs.push(agentRowMap.get(e.target)!);
+          }
+        });
+        const y = connectedAgentYs.length > 0
+          ? connectedAgentYs.reduce((a, b) => a + b, 0) / connectedAgentYs.length
+          : globalYOffset + i * (NODE_HEIGHT + nodeSep);
+        positioned.set(node.id, { x: colX(0), y });
+      });
+    }
+
+    // Third pass: position MCPServers aligned to their connected agents
+    const mcpCol = clusterByCol.get(mcpServerCol);
+    if (mcpCol) {
+      mcpCol.forEach((node, i) => {
+        if (lockedNodeIds.has(node.id)) return;
+        const connectedAgentYs: number[] = [];
+        edges.forEach(e => {
+          if (e.source === node.id && agentRowMap.has(e.target)) {
+            connectedAgentYs.push(agentRowMap.get(e.target)!);
+          }
+        });
+        const y = connectedAgentYs.length > 0
+          ? connectedAgentYs.reduce((a, b) => a + b, 0) / connectedAgentYs.length
+          : globalYOffset + i * (NODE_HEIGHT + nodeSep);
+        positioned.set(node.id, { x: colX(mcpServerCol), y });
+      });
+    }
 
     // Advance global Y offset by the tallest column in this cluster + gap
     const clusterGap = nodeSep * 1.5;

@@ -71,20 +71,28 @@ export function VisualMapToolbar({
 
       <div className="flex-1" />
 
-      {/* Status filter */}
+      {/* Status filter with RAG colors */}
       <div className="flex items-center gap-1">
-        {['ready', 'pending', 'failed'].map((status) => {
-          const active = statusFilter.has(status);
+        {([
+          { key: 'ready', color: 'hsl(var(--success))' },
+          { key: 'pending', color: 'hsl(var(--warning))' },
+          { key: 'failed', color: 'hsl(var(--destructive))' },
+        ] as const).map(({ key, color }) => {
+          const active = statusFilter.has(key);
           return (
             <button
-              key={status}
-              onClick={() => onToggleStatus(status)}
+              key={key}
+              onClick={() => onToggleStatus(key)}
               className={`
-                text-[10px] px-2 py-0.5 rounded-full capitalize transition-all duration-150
+                flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full capitalize transition-all duration-150
                 ${active ? 'bg-secondary text-foreground' : 'text-muted-foreground/40 hover:text-muted-foreground'}
               `}
             >
-              {status}
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: color, opacity: active ? 1 : 0.3 }}
+              />
+              {key}
             </button>
           );
         })}
