@@ -12,6 +12,16 @@ src/components/
 ├── mcp/             # MCPServer (Overview, Pods, ToolsDebug)
 ├── modelapi/        # ModelAPI (Overview, Pods, Diagnostics)
 ├── dashboard/       # Dashboard widgets (OverviewDashboard, VisualMap)
+│   └── visual-map/  # Enhanced visual topology module
+│       ├── index.tsx              # ReactFlow orchestration + providers
+│       ├── ResourceNode.tsx       # Custom node with semantic zoom, quick-action icons, context menu
+│       ├── ColumnHeaderNode.tsx   # Column header label node
+│       ├── VisualMapToolbar.tsx   # Filter bar, search, layout controls (Fit, Re-layout, Lock)
+│       ├── VisualMapContextMenu.tsx # Right-click context menu for nodes
+│       ├── useVisualMapLayout.ts  # Dagre auto-layout hook + locked-positions state
+│       ├── useVisualMapFilters.ts # Graph-aware filter/search hook
+│       ├── layout-engine.ts      # Dagre wrapper for computing node positions
+│       └── types.ts              # Shared types (ResourceNodeData, filter state, etc.)
 ├── kubernetes/      # K8s resources (PodsList, SecretsList, CreateSecretDialog)
 ├── layout/          # Layout (MainLayout, Sidebar, Header, ConnectionStatus)
 ├── resources/       # Resource CRUD
@@ -37,14 +47,18 @@ The sidebar is organized into 5 sections:
 | **MONITORING** | KAOS System, KAOS Observability (id: `kaos-monitoring`) |
 | **CONFIG** | Settings |
 
-### Visual Map (`VisualMap.tsx`)
+### Visual Map (`VisualMap.tsx` → `visual-map/`)
 
-Interactive node-based visualization using `@xyflow/react`:
-- 3-column layout: ModelAPI → MCPServer → Agent
+Interactive topology view using `@xyflow/react` + `@dagrejs/dagre`:
+- **Auto-layout** via dagre (LR direction) with Re-layout, Fit View, Lock toolbar controls
+- **Semantic zoom**: compact pill at zoom < 0.6, full card at >= 0.6, detailed metadata at >= 1.2
+- **Graph-aware filtering**: toggle by resource kind, status; search highlights + auto-pans to nodes
+- **Status overlays**: colored status dots on nodes, edge labels (`model`/`tools`), animated edges for ready sources
+- **Context menus**: right-click for View Overview/YAML/Pods/Chat/Tools/Diagnostics, Focus in Graph, Edit
+- **Draggable nodes**: controlled `useNodesState` with drag-to-lock positioning
+- **Quick-action icons**: per-resource-type icon buttons (Overview, Chat, Tools, Diagnostics, Memory)
 - Edges derived from `agent.spec.modelAPI` and `agent.spec.mcpServers[]`
-- Custom `ResourceNode` with colored left border, status badge, namespace
-- Click navigates to resource detail page
-- Includes MiniMap, Controls, and fitView
+- `VisualMap.tsx` is a thin re-export; all logic lives in `visual-map/`
 - **Always-mounted** with CSS `hidden` class to preserve pan/zoom state across tab switches
 
 ### Agent Chat Client (`src/lib/agent-client.ts`)
