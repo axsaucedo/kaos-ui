@@ -136,6 +136,12 @@ export function useAgentChat(options: UseAgentChatOptions) {
               const lastMessage = updated[updated.length - 1];
               if (lastMessage.role === 'assistant') {
                 lastMessage.isStreaming = false;
+                // Final cleanup: remove cross-chunk artifacts from accumulated content
+                let cleaned = lastMessage.content;
+                cleaned = cleaned.replace(/```json\s*\{\s*\}\s*```\s*/g, '');
+                cleaned = cleaned.replace(/^\s*\{\s*\}\s*/g, '');
+                cleaned = cleaned.replace(/\s*\{\s*\}\s*$/g, '');
+                lastMessage.content = cleaned.trim();
                 if (lastMessage.progressSteps) {
                   lastMessage.progressSteps = lastMessage.progressSteps.map(s => ({ ...s, completed: true }));
                 }

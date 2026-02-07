@@ -12,21 +12,23 @@ interface ChatMessageProps {
   timestamp?: Date;
 }
 
-// Detect if the message contains an error pattern
+// Detect if the message is a system/transport error (NOT agent prose about failures)
+// Only match when the content itself IS the error message (short, structured)
 function detectError(content: string): { isError: boolean; errorType: string } {
+  // Only check short messages — long agent prose is never a transport error
+  if (content.length > 300) return { isError: false, errorType: '' };
+
   const errorPatterns = [
-    { pattern: /error.*404.*not found/i, type: 'Not Found (404)' },
-    { pattern: /error.*503.*service unavailable/i, type: 'Service Unavailable (503)' },
-    { pattern: /error.*500.*internal server/i, type: 'Internal Server Error (500)' },
-    { pattern: /client error/i, type: 'Client Error' },
-    { pattern: /connection refused/i, type: 'Connection Refused' },
-    { pattern: /timeout/i, type: 'Timeout' },
-    { pattern: /sorry,? i encountered an error/i, type: 'Agent Error' },
-    { pattern: /failed to/i, type: 'Operation Failed' },
+    { pattern: /^error.*404.*not found/i, type: 'Not Found (404)' },
+    { pattern: /^error.*503.*service unavailable/i, type: 'Service Unavailable (503)' },
+    { pattern: /^error.*500.*internal server/i, type: 'Internal Server Error (500)' },
+    { pattern: /^chat api error \d+/i, type: 'API Error' },
+    { pattern: /^connection refused/i, type: 'Connection Refused' },
+    { pattern: /^error: failed to get response$/i, type: 'No Response' },
   ];
 
   for (const { pattern, type } of errorPatterns) {
-    if (pattern.test(content)) {
+    if (pattern.test(content.trim())) {
       return { isError: true, errorType: type };
     }
   }
