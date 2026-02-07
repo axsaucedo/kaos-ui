@@ -271,7 +271,8 @@ export default function AgentDetail() {
           <AgentOverview agent={agent} />
         </TabsContent>
 
-        <TabsContent value="chat" className="h-[calc(100vh-320px)]">
+        {/* Chat is always mounted but hidden when not active to preserve streaming state */}
+        <div className={currentTab === 'chat' ? 'h-[calc(100vh-320px)]' : 'hidden'}>
           <AgentChat 
             agent={agent}
             sessionId={sessionId}
@@ -280,7 +281,7 @@ export default function AgentDetail() {
             onMessagesChange={setChatMessages}
             onNewSession={handleNewSession}
           />
-        </TabsContent>
+        </div>
 
         <TabsContent value="memory" className="space-y-6">
           <AgentMemory agent={agent} />
