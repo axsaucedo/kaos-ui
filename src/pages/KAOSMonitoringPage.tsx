@@ -117,7 +117,7 @@ export default function KAOSMonitoringPage() {
   const showNotInstalled = !loading && (error || !signozService);
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in h-full flex flex-col">
+    <div className="p-6 space-y-6 h-full flex flex-col">
       {/* Page Header */}
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">

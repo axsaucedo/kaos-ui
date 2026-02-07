@@ -53,7 +53,9 @@ function IndexContent() {
 
   return (
     <>
-      {renderContent()}
+      <div key={activeTab} className="animate-tab-switch">
+        {renderContent()}
+      </div>
       
       {/* Visual Map always mounted to preserve pan/zoom state */}
       <div className={activeTab === 'visual-map' ? 'h-full w-full' : 'hidden'}>

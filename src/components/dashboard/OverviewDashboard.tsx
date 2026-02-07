@@ -209,7 +209,7 @@ export function OverviewDashboard() {
   }).slice(0, 6);
 
   return (
-    <div className="p-6 space-y-6 animate-fade-in">
+    <div className="p-6 space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-foreground">Dashboard Overview</h1>
