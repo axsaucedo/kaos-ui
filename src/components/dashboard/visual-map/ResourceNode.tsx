@@ -185,7 +185,7 @@ export function ResourceNode({ data, onEdit }: { data: ResourceNodeData; onEdit?
                 <TooltipTrigger asChild>
                   <button
                     onClick={(e) => handleQuickAction(qa.tab, e)}
-                    className="p-1.5 rounded text-muted-foreground transition-all duration-200 hover:scale-150 hover:text-foreground hover:bg-primary/15 hover:shadow-[0_0_8px_hsl(var(--primary)/0.4)]"
+                    className="p-1.5 rounded-lg text-muted-foreground transition-all duration-300 ease-out hover:scale-[2] hover:text-[hsl(180_100%_80%)] hover:bg-[linear-gradient(135deg,hsl(270_80%_60%/0.25),hsl(190_100%_50%/0.25))] hover:shadow-[0_0_12px_hsl(270_80%_60%/0.5),0_0_24px_hsl(190_100%_50%/0.3)] hover:z-10 relative"
                   >
                     <QAIcon className="h-3.5 w-3.5" />
                   </button>
@@ -199,7 +199,7 @@ export function ResourceNode({ data, onEdit }: { data: ResourceNodeData; onEdit?
             <TooltipTrigger asChild>
               <button
                 onClick={handleEdit}
-                className="p-1.5 rounded text-muted-foreground transition-all duration-200 hover:scale-150 hover:text-foreground hover:bg-primary/15 hover:shadow-[0_0_8px_hsl(var(--primary)/0.4)] opacity-0 group-hover:opacity-100"
+                className="p-1.5 rounded-lg text-muted-foreground transition-all duration-300 ease-out hover:scale-[2] hover:text-[hsl(180_100%_80%)] hover:bg-[linear-gradient(135deg,hsl(270_80%_60%/0.25),hsl(190_100%_50%/0.25))] hover:shadow-[0_0_12px_hsl(270_80%_60%/0.5),0_0_24px_hsl(190_100%_50%/0.3)] hover:z-10 relative opacity-0 group-hover:opacity-100"
               >
                 <Pencil className="h-3.5 w-3.5" />
               </button>
