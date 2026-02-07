@@ -32,7 +32,8 @@ function IndexContent() {
   const renderContent = () => {
     switch (activeTab) {
       case 'overview': return <OverviewDashboard />;
-      case 'visual-map': return <VisualMap />;
+      // visual-map is rendered separately to preserve pan/zoom state
+      case 'visual-map': return null;
       case 'model-apis': return <ModelAPIList />;
       case 'mcp-servers': return <MCPServerList />;
       case 'agents': return <AgentList />;
@@ -54,6 +55,11 @@ function IndexContent() {
     <>
       {renderContent()}
       
+      {/* Visual Map always mounted to preserve pan/zoom state */}
+      <div className={activeTab === 'visual-map' ? 'h-full w-full' : 'hidden'}>
+        <VisualMap />
+      </div>
+
       {/* KAOS Monitoring is always mounted but hidden when not active to preserve iframe state */}
       <div className={activeTab === 'kaos-monitoring' ? 'h-full w-full' : 'hidden'}>
         <KAOSMonitoringPage />

@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { flushSync } from 'react-dom';
-import { k8sClient } from '@/lib/kubernetes-client';
+import { streamAgentChat } from '@/lib/agent-client';
 import type { ProgressStep } from '@/components/agent/ReasoningSteps';
 
 export interface ChatMessage {
@@ -89,7 +89,7 @@ export function useAgentChat(options: UseAgentChatOptions) {
     try {
       console.log(`[useAgentChat] Sending to service: ${resolvedServiceName} in namespace: ${namespace} (stream=true)`);
       
-      await k8sClient.streamChatCompletion(
+      await streamAgentChat(
         resolvedServiceName,
         apiMessages,
         {
@@ -136,7 +136,6 @@ export function useAgentChat(options: UseAgentChatOptions) {
               const lastMessage = updated[updated.length - 1];
               if (lastMessage.role === 'assistant') {
                 lastMessage.isStreaming = false;
-                // Mark all steps completed
                 if (lastMessage.progressSteps) {
                   lastMessage.progressSteps = lastMessage.progressSteps.map(s => ({ ...s, completed: true }));
                 }

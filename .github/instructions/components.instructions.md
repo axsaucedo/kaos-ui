@@ -45,6 +45,17 @@ Interactive node-based visualization using `@xyflow/react`:
 - Custom `ResourceNode` with colored left border, status badge, namespace
 - Click navigates to resource detail page
 - Includes MiniMap, Controls, and fitView
+- **Always-mounted** with CSS `hidden` class to preserve pan/zoom state across tab switches
+
+### Agent Chat Client (`src/lib/agent-client.ts`)
+
+Dedicated streaming client for agent chat completions, separated from the general K8s CRUD client:
+- Calls K8s service proxy directly: `/api/v1/namespaces/{ns}/services/{name}:8000/proxy/v1/chat/completions`
+- Sets SSE headers (`Accept: text/event-stream`, `Cache-Control: no-cache`) to prevent proxy buffering
+- Parses SSE `data:` lines inline via `ReadableStream` reader
+- Detects progress blocks (`type: 'progress'`) and routes to `onProgress` callback
+- Filters artifacts: standalone `{}`, markdown-wrapped `{}` blocks, `**Final Response to User:**` headers
+- Used by `useAgentChat` hook; the general `kubernetes-client.ts` has no streaming code
 
 ### Component Naming
 

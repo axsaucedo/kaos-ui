@@ -50,7 +50,7 @@ export default function AgentDetail() {
   };
   
   // Get initial tab from URL params (for returning from logs page)
-  const initialTab = searchParams.get('tab') || 'chat';
+  const initialTab = searchParams.get('tab') || 'overview';
   const [currentTab, setCurrentTab] = useState(initialTab);
   
   // Chat state lifted here to persist across tab switches
