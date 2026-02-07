@@ -24,9 +24,20 @@ import { VisualMapToolbar } from './VisualMapToolbar';
 import { VisualMapContextMenu } from './VisualMapContextMenu';
 import { useVisualMapLayout } from './useVisualMapLayout';
 import { useVisualMapFilters } from './useVisualMapFilters';
-import type { ResourceNodeData } from './types';
+import type { ResourceNodeData, ResourceKind } from './types';
 
-// ── Wrap ResourceNode with context menu ──
+// Edit dialogs
+import { AgentEditDialog } from '@/components/resources/AgentEditDialog';
+import { MCPServerEditDialog } from '@/components/resources/MCPServerEditDialog';
+import { ModelAPIEditDialog } from '@/components/resources/ModelAPIEditDialog';
+// Create dialogs
+import { AgentCreateDialog } from '@/components/resources/AgentCreateDialog';
+import { MCPServerCreateDialog } from '@/components/resources/MCPServerCreateDialog';
+import { ModelAPICreateDialog } from '@/components/resources/ModelAPICreateDialog';
+
+import type { Agent, MCPServer, ModelAPI } from '@/types/kubernetes';
+
+// ── Wrap ResourceNode with context menu + edit handler ──
 function ContextMenuResourceNode({ data, ...rest }: { data: ResourceNodeData; [key: string]: any }) {
   const { fitView } = useReactFlow();
 
@@ -43,7 +54,7 @@ function ContextMenuResourceNode({ data, ...rest }: { data: ResourceNodeData; [k
   return (
     <VisualMapContextMenu data={data} onFocusNode={handleFocusNode} onEditNode={handleEditNode}>
       <div>
-        <ResourceNode data={data} />
+        <ResourceNode data={data} onEdit={handleEditNode} />
       </div>
     </VisualMapContextMenu>
   );
@@ -51,7 +62,7 @@ function ContextMenuResourceNode({ data, ...rest }: { data: ResourceNodeData; [k
 
 const nodeTypes: NodeTypes = {
   resourceNode: ContextMenuResourceNode as any,
-  columnHeader: ColumnHeaderNode,
+  columnHeader: ColumnHeaderNode as any,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -60,10 +71,13 @@ const edgeTypes: EdgeTypes = {
 
 // ── Inner component (needs ReactFlowProvider) ──
 function VisualMapInner() {
-  const { modelAPIs, mcpServers, agents } = useKubernetesStore();
+  const { modelAPIs, mcpServers, agents, selectedResource, selectedResourceMode, setSelectedResource, setSelectedResourceMode } = useKubernetesStore();
   const [zoom, setZoom] = useState(1);
   const [isCompact, setIsCompact] = useState(false);
   const [dimModelAPIEdges, setDimModelAPIEdges] = useState(false);
+
+  // Create dialog state
+  const [createKind, setCreateKind] = useState<ResourceKind | null>(null);
 
   const {
     initialNodes,
@@ -80,13 +94,27 @@ function VisualMapInner() {
 
   const { fitView } = useReactFlow();
 
-  // Only sync nodes/edges when there's an actual structural change
+  // Inject onAdd callbacks into header nodes
+  const nodesWithCallbacks = useMemo(() => {
+    return initialNodes.map(node => {
+      if (node.type === 'columnHeader') {
+        const kind = node.id.replace('header-', '') as ResourceKind;
+        return { ...node, data: { ...node.data, onAdd: () => setCreateKind(kind) } };
+      }
+      return node;
+    });
+  }, [initialNodes]);
+
+  // Sync nodes when structural change, sync edges always (for dimming toggle)
   useEffect(() => {
     if (changed) {
-      setNodes(initialNodes);
-      setEdges(initialEdges);
+      setNodes(nodesWithCallbacks);
     }
-  }, [initialNodes, initialEdges, changed, setNodes, setEdges]);
+  }, [nodesWithCallbacks, changed, setNodes]);
+
+  useEffect(() => {
+    setEdges(initialEdges);
+  }, [initialEdges, setEdges]);
 
   // Track zoom (for label detail level, NOT for compact toggle)
   useOnViewportChange({
@@ -115,6 +143,16 @@ function VisualMapInner() {
 
   const toggleCompact = useCallback(() => setIsCompact(prev => !prev), []);
   const toggleDimModelAPIEdges = useCallback(() => setDimModelAPIEdges(prev => !prev), []);
+
+  // Determine what's being edited
+  const editingAgent = selectedResourceMode === 'edit' && selectedResource?.kind === 'Agent' ? selectedResource as Agent : null;
+  const editingMCPServer = selectedResourceMode === 'edit' && selectedResource?.kind === 'MCPServer' ? selectedResource as MCPServer : null;
+  const editingModelAPI = selectedResourceMode === 'edit' && selectedResource?.kind === 'ModelAPI' ? selectedResource as ModelAPI : null;
+
+  const closeEdit = useCallback(() => {
+    setSelectedResource(null);
+    setSelectedResourceMode(null);
+  }, [setSelectedResource, setSelectedResourceMode]);
 
   const isEmpty = modelAPIs.length === 0 && mcpServers.length === 0 && agents.length === 0;
 
@@ -179,6 +217,22 @@ function VisualMapInner() {
               />
             </ReactFlow>
           </div>
+
+          {/* Edit Dialogs */}
+          {editingAgent && (
+            <AgentEditDialog agent={editingAgent} open onClose={closeEdit} />
+          )}
+          {editingMCPServer && (
+            <MCPServerEditDialog mcpServer={editingMCPServer} open onClose={closeEdit} />
+          )}
+          {editingModelAPI && (
+            <ModelAPIEditDialog modelAPI={editingModelAPI} open onClose={closeEdit} />
+          )}
+
+          {/* Create Dialogs */}
+          <AgentCreateDialog open={createKind === 'Agent'} onClose={() => setCreateKind(null)} />
+          <MCPServerCreateDialog open={createKind === 'MCPServer'} onClose={() => setCreateKind(null)} />
+          <ModelAPICreateDialog open={createKind === 'ModelAPI'} onClose={() => setCreateKind(null)} />
         </TooltipProvider>
       </VisualMapCompactContext.Provider>
     </VisualMapZoomContext.Provider>
