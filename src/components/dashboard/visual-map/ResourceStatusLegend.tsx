@@ -31,13 +31,16 @@ function countStatuses(resources: (ModelAPI | MCPServer | Agent)[]) {
 }
 
 function StatusBubble({ count, variant }: { count: number; variant: 'success' | 'warning' | 'destructive' }) {
-  const colors = {
-    success: 'bg-emerald-500/90 text-white',
-    warning: 'bg-amber-500/90 text-white',
-    destructive: 'bg-rose-500/90 text-white',
+  const styles: Record<string, React.CSSProperties> = {
+    success: { backgroundColor: 'hsl(152 70% 32%)', color: 'hsl(152 80% 80%)' },
+    warning: { backgroundColor: 'hsl(35 65% 30%)', color: 'hsl(38 90% 72%)' },
+    destructive: { backgroundColor: 'hsl(0 55% 32%)', color: 'hsl(0 80% 78%)' },
   };
   return (
-    <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold ${colors[variant]}`}>
+    <span
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] font-bold"
+      style={styles[variant]}
+    >
       {count}
     </span>
   );
@@ -51,7 +54,7 @@ export function ResourceStatusLegend({ modelAPIs, mcpServers, agents }: Resource
   ], [modelAPIs, mcpServers, agents]);
 
   return (
-    <div className="absolute bottom-3 left-3 z-10 opacity-40 hover:opacity-100 transition-opacity duration-300">
+    <div className="absolute bottom-3 left-14 z-10 opacity-40 hover:opacity-100 transition-opacity duration-300">
       <div className="bg-card/90 backdrop-blur-sm border border-border rounded-lg px-3 py-2 shadow-sm">
         <div className="flex flex-col gap-1.5">
           {rows.map((row) => (
