@@ -9,6 +9,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { k8sClient } from '@/lib/kubernetes-client';
 import type { ProgressStep } from '@/components/agent/ReasoningSteps';
 
@@ -101,25 +102,28 @@ export function useAgentChat(options: UseAgentChatOptions) {
           signal: abortController.signal,
           onProgress: (progress) => {
             console.log(`[useAgentChat] Progress:`, progress);
-            setMessages(prev => {
-              const updated = [...prev];
-              const lastMessage = updated[updated.length - 1];
-              if (lastMessage.role === 'assistant') {
-                // Mark previous steps as completed, add new one
-                const existingSteps = (lastMessage.progressSteps || []).map(s => ({ ...s, completed: true } as ProgressStep));
-                lastMessage.progressSteps = [...existingSteps, { ...progress, type: 'progress' as const }];
-              }
-              return updated;
+            flushSync(() => {
+              setMessages(prev => {
+                const updated = [...prev];
+                const lastMessage = updated[updated.length - 1];
+                if (lastMessage.role === 'assistant') {
+                  const existingSteps = (lastMessage.progressSteps || []).map(s => ({ ...s, completed: true } as ProgressStep));
+                  lastMessage.progressSteps = [...existingSteps, { ...progress, type: 'progress' as const }];
+                }
+                return updated;
+              });
             });
           },
           onChunk: (chunk) => {
-            setMessages(prev => {
-              const updated = [...prev];
-              const lastMessage = updated[updated.length - 1];
-              if (lastMessage.role === 'assistant') {
-                lastMessage.content += chunk;
-              }
-              return updated;
+            flushSync(() => {
+              setMessages(prev => {
+                const updated = [...prev];
+                const lastMessage = updated[updated.length - 1];
+                if (lastMessage.role === 'assistant') {
+                  lastMessage.content += chunk;
+                }
+                return updated;
+              });
             });
           },
           onDone: (metadata) => {

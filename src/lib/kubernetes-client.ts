@@ -1103,10 +1103,17 @@ class KubernetesClient {
                 if (typeof content === 'string' && content.trimStart().startsWith('{')) {
                   try {
                     const progressData = JSON.parse(content);
-                    if (progressData && typeof progressData === 'object' && progressData.type === 'progress' && onProgress) {
-                      console.log('[k8sClient] Progress block detected:', progressData);
-                      onProgress(progressData);
-                      continue;
+                    if (progressData && typeof progressData === 'object') {
+                      if (progressData.type === 'progress' && onProgress) {
+                        console.log('[k8sClient] Progress block detected:', progressData);
+                        onProgress(progressData);
+                        continue;
+                      }
+                      // Skip empty JSON objects {} (no-action signals)
+                      if (Object.keys(progressData).length === 0) {
+                        console.log('[k8sClient] Skipping empty JSON block');
+                        continue;
+                      }
                     }
                   } catch {
                     // Not valid JSON - treat as regular content
