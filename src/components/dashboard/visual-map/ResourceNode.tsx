@@ -54,7 +54,9 @@ function getStatusVariant(status: string): 'success' | 'warning' | 'destructive'
     case 'ready':
     case 'running': return 'success';
     case 'pending':
-    case 'waiting': return 'warning';
+    case 'waiting':
+    case 'updating':
+    case 'progressing': return 'warning';
     case 'failed':
     case 'error': return 'destructive';
     default: return 'secondary';
@@ -66,7 +68,9 @@ function getStatusDotColor(status: string): string {
     case 'ready':
     case 'running': return 'bg-success';
     case 'pending':
-    case 'waiting': return 'bg-warning';
+    case 'waiting':
+    case 'updating':
+    case 'progressing': return 'bg-warning';
     case 'failed':
     case 'error': return 'bg-destructive';
     default: return 'bg-muted-foreground';
@@ -89,7 +93,6 @@ export function ResourceNode({ data, onEdit }: { data: ResourceNodeData; onEdit?
   const { namespace, name } = data.resource.metadata;
   const basePath = `/${route}/${namespace}/${name}`;
 
-  const handleClick = () => navigate(basePath);
   const handleQuickAction = (tab: string, e: React.MouseEvent) => {
     e.stopPropagation();
     navigate(tab === 'overview' ? basePath : `${basePath}?tab=${tab}`);
@@ -118,12 +121,11 @@ export function ResourceNode({ data, onEdit }: { data: ResourceNodeData; onEdit?
       <>
         {handles}
         <div
-          onClick={handleClick}
           className={`
             flex items-center gap-2 bg-card border border-border rounded-full px-3 py-1.5
             border-l-4 ${config.colorClass}
             shadow-sm hover:shadow-md hover:border-primary/30
-            transition-all duration-200 cursor-pointer
+            transition-all duration-200
           `}
         >
           <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -139,12 +141,11 @@ export function ResourceNode({ data, onEdit }: { data: ResourceNodeData; onEdit?
     <>
       {handles}
       <div
-        onClick={handleClick}
         className={`
           bg-card border border-border rounded-xl px-4 py-3 min-w-[200px] max-w-[240px]
           border-l-4 ${config.colorClass}
           shadow-sm hover:shadow-md hover:border-primary/30
-          transition-all duration-200 cursor-pointer group
+          transition-all duration-200 group
           ${data.isHighlighted ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}
         `}
         style={data.isDimmed ? { opacity: 0.15, pointerEvents: 'none' } : undefined}
