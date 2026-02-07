@@ -1000,7 +1000,7 @@ class KubernetesClient {
 
   /**
    * Send chat completion to an OpenAI-compatible agent service
-   * Uses non-streaming mode and returns the full response
+   * Supports both streaming (SSE) and non-streaming modes
    */
   async streamChatCompletion(
     serviceName: string,
@@ -1012,12 +1012,15 @@ class KubernetesClient {
       maxTokens?: number;
       sessionId?: string;
       seed?: number;
+      stream?: boolean;
       onChunk: (content: string) => void;
+      onProgress?: (progress: { type: string; step: number; max_steps: number; action: string; target: string }) => void;
       onDone: (metadata?: { sessionId?: string }) => void;
       onError: (error: Error) => void;
+      signal?: AbortSignal;
     }
   ): Promise<void> {
-    const { namespace, model = 'default', temperature = 0.7, maxTokens, sessionId, seed, onChunk, onDone, onError } = options;
+    const { namespace, model = 'default', temperature = 0.7, maxTokens, sessionId, seed, stream = true, onChunk, onProgress, onDone, onError, signal } = options;
 
     try {
       const response = await this.proxyServiceRequest(
@@ -1028,12 +1031,13 @@ class KubernetesClient {
           body: JSON.stringify({
             model,
             messages,
-            stream: false, // Non-streaming mode to preserve newlines
+            stream,
             temperature,
             ...(maxTokens && { max_tokens: maxTokens }),
             ...(sessionId && { session_id: sessionId }),
             ...(seed !== undefined && { seed }),
           }),
+          signal,
         },
         namespace
       );
@@ -1043,25 +1047,85 @@ class KubernetesClient {
         throw new Error(`Chat API error ${response.status}: ${errorText}`);
       }
 
-      const data = await response.json();
-      console.log('[k8sClient] Non-streaming response:', JSON.stringify(data).substring(0, 500));
-      
-      // Extract session_id from response if present
-      const receivedSessionId = data.session_id;
-      if (receivedSessionId) {
-        console.log('[k8sClient] Received session ID:', receivedSessionId);
+      if (!stream) {
+        // Non-streaming mode
+        const data = await response.json();
+        console.log('[k8sClient] Non-streaming response:', JSON.stringify(data).substring(0, 500));
+        const receivedSessionId = data.session_id;
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          onChunk(content);
+        }
+        onDone({ sessionId: receivedSessionId });
+        return;
       }
-      
-      // Get the full content from the response
-      const content = data.choices?.[0]?.message?.content;
-      if (content) {
-        console.log('[k8sClient] Full content (first 200 chars):', JSON.stringify(content).substring(0, 200));
-        console.log('[k8sClient] Content has newlines:', content.includes('\n'));
-        onChunk(content);
+
+      // Streaming SSE mode
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body for streaming');
       }
-      
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let receivedSessionId: string | undefined;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith(':')) continue;
+
+          if (trimmed.startsWith('data: ')) {
+            const data = trimmed.slice(6);
+            if (data === '[DONE]') {
+              onDone({ sessionId: receivedSessionId });
+              return;
+            }
+
+            try {
+              const parsed = JSON.parse(data);
+              
+              // Extract session_id from the response object
+              if (parsed.session_id) {
+                receivedSessionId = parsed.session_id;
+              }
+
+              const content = parsed.choices?.[0]?.delta?.content;
+              if (content !== undefined && content !== null) {
+                // Check if this chunk is a progress block
+                try {
+                  const progressData = JSON.parse(content);
+                  if (progressData.type === 'progress' && onProgress) {
+                    onProgress(progressData);
+                    continue;
+                  }
+                } catch {
+                  // Not JSON - it's regular content
+                }
+                onChunk(content);
+              }
+            } catch {
+              // Skip unparseable lines
+              console.warn('[k8sClient] Skipping unparseable SSE line:', trimmed);
+            }
+          }
+        }
+      }
+
+      // Stream ended without [DONE]
       onDone({ sessionId: receivedSessionId });
     } catch (error) {
+      if (signal?.aborted) {
+        console.log('[k8sClient] Stream aborted by user');
+        return;
+      }
       console.error('[k8sClient] chatCompletion error:', error);
       onError(error instanceof Error ? error : new Error(String(error)));
     }

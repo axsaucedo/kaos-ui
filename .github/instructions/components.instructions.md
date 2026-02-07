@@ -68,9 +68,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 ### Standard Tab Structure
 
 1. **Overview** - General info, status, configuration
-2. **Pods** - Associated pods and their status
-3. **YAML** - Raw resource definition (read-only)
-4. Resource-specific tabs (Chat, Memory, Tools, Diagnostics)
+2. **Chat** (Agent only) - Streaming chat with reasoning steps display; kept always-mounted via CSS visibility to preserve SSE streams across tab switches
+3. **Memory** (Agent only) - Session history and events
+4. **Pods** - Associated pods and their status
+5. **YAML** - Raw resource definition (read-only)
+6. Resource-specific tabs (Tools, Diagnostics)
 
 ### Example Pattern
 
@@ -110,6 +112,12 @@ export default function AgentDetail() {
         <TabsContent value="overview">
           <AgentOverview agent={agent} />
         </TabsContent>
+
+        {/* Chat always mounted to preserve streaming state */}
+        <div className={currentTab === 'chat' ? 'h-[calc(100vh-320px)]' : 'hidden'}>
+          <AgentChat agent={agent} ... />
+        </div>
+
         {/* ... other tabs */}
       </Tabs>
 

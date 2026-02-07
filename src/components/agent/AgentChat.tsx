@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Label } from '@/components/ui/label';
 import { ChatMessage } from './ChatMessage';
+import { ReasoningSteps } from './ReasoningSteps';
 import { useAgentChat, ChatMessage as ChatMessageType } from '@/hooks/useAgentChat';
 import { k8sClient } from '@/lib/kubernetes-client';
 import type { Agent } from '@/types/kubernetes';
@@ -315,13 +316,21 @@ export function AgentChat({
         ) : (
           <div className="divide-y divide-border/50">
             {externalMessages.map((message) => (
-              <ChatMessage
-                key={message.id}
-                role={message.role}
-                content={message.content}
-                isStreaming={message.isStreaming}
-                timestamp={message.timestamp}
-              />
+              <div key={message.id}>
+                {/* Show reasoning steps before the assistant message content */}
+                {message.role === 'assistant' && message.progressSteps && message.progressSteps.length > 0 && (
+                  <ReasoningSteps
+                    steps={message.progressSteps}
+                    isActive={!!message.isStreaming && !message.content}
+                  />
+                )}
+                <ChatMessage
+                  role={message.role}
+                  content={message.content}
+                  isStreaming={message.isStreaming}
+                  timestamp={message.timestamp}
+                />
+              </div>
             ))}
           </div>
         )}

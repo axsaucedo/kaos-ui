@@ -36,7 +36,7 @@ The UI is a static SPA that connects to Kubernetes via a CORS proxy (`kaos ui --
 ```
 src/
 ├── components/          # React components
-│   ├── agent/           # Agent-specific (Chat, Memory, Overview, Pods)
+│   ├── agent/           # Agent-specific (Chat, ChatMessage, ReasoningSteps, Memory, Overview, Pods)
 │   ├── mcp/             # MCPServer components (Overview, Pods, ToolsDebug)
 │   ├── modelapi/        # ModelAPI components (Overview, Pods, Diagnostics)
 │   ├── dashboard/       # Dashboard widgets (OverviewDashboard)
@@ -230,6 +230,19 @@ const agent = await k8sClient.getAgent(name, namespace);
 const response = await k8sClient.proxyServiceRequest(
   'agent-my-agent', '/chat/completions', { method: 'POST', body: '...' }, namespace
 );
+
+// Chat completion with SSE streaming (two-phase agentic loop)
+// Phase 1: Progress blocks (tool_call, delegate actions)
+// Phase 2: Streamed final response tokens
+await k8sClient.streamChatCompletion(serviceName, messages, {
+  namespace,
+  stream: true,
+  onProgress: (progress) => { /* { type: 'progress', step, max_steps, action, target } */ },
+  onChunk: (content) => { /* streamed content token */ },
+  onDone: (metadata) => { /* { sessionId? } */ },
+  onError: (error) => { /* Error */ },
+  signal: abortController.signal,
+});
 ```
 
 ### Form Patterns
