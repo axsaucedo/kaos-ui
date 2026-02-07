@@ -49,15 +49,18 @@ The sidebar is organized into 5 sections:
 
 ### Visual Map (`VisualMap.tsx` → `visual-map/`)
 
-Interactive topology view using `@xyflow/react` + `@dagrejs/dagre`:
-- **Auto-layout** via dagre (LR direction) with Re-layout, Fit View, Lock toolbar controls
-- **Semantic zoom**: compact pill at zoom < 0.6, full card at >= 0.6, detailed metadata at >= 1.2
+Interactive topology view using `@xyflow/react` with a custom zero-dependency layout engine:
+- **3-tier column layout**: ModelAPIs (left), Agents (middle, multi-column by dependency depth), MCPServers (right)
+- **Agent-to-agent edges**: derived from `agent.spec.agentNetwork.access[]` — each entry names a target agent the source can communicate with
+- **Clustered layout**: union-find groups interconnected components; disconnected clusters are vertically separated using a global Y offset
+- **Manual compact toggle**: Full Card ↔ Compact Pill via toolbar button (no zoom-based triggers)
+- **Dynamic edge anchors**: `DynamicEdge.tsx` uses `getSmoothStepPath` with 4-point closest-anchor selection (top/bottom/left/right)
+- **ModelAPI edge dimming**: toolbar eye toggle dims gray ModelAPI edges to reduce visual noise
 - **Graph-aware filtering**: toggle by resource kind, status; search highlights + auto-pans to nodes
-- **Status overlays**: colored status dots on nodes, edge labels (`model`/`tools`), animated edges for ready sources
+- **Status overlays**: colored status dots on nodes, edge labels (`model`/`tools`/`a2a`), animated edges
 - **Context menus**: right-click for View Overview/YAML/Pods/Chat/Tools/Diagnostics, Focus in Graph, Edit
 - **Draggable nodes**: controlled `useNodesState` with drag-to-lock positioning
-- **Quick-action icons**: per-resource-type icon buttons (Overview, Chat, Tools, Diagnostics, Memory)
-- Edges derived from `agent.spec.modelAPI` and `agent.spec.mcpServers[]`
+- Edges derived from `agent.spec.modelAPI`, `agent.spec.mcpServers[]`, and `agent.spec.agentNetwork.access[]`
 - `VisualMap.tsx` is a thin re-export; all logic lives in `visual-map/`
 - **Always-mounted** with CSS `hidden` class to preserve pan/zoom state across tab switches
 
