@@ -9,6 +9,7 @@ import {
   useReactFlow,
   useOnViewportChange,
   type NodeTypes,
+  type EdgeTypes,
   type Viewport,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -16,8 +17,9 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Bot } from 'lucide-react';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
-import { ResourceNode, VisualMapZoomContext, VisualMapDirectionContext } from './ResourceNode';
+import { ResourceNode, VisualMapZoomContext, VisualMapCompactContext } from './ResourceNode';
 import { ColumnHeaderNode } from './ColumnHeaderNode';
+import { DynamicEdge } from './DynamicEdge';
 import { VisualMapToolbar } from './VisualMapToolbar';
 import { VisualMapContextMenu } from './VisualMapContextMenu';
 import { useVisualMapLayout } from './useVisualMapLayout';
@@ -52,21 +54,24 @@ const nodeTypes: NodeTypes = {
   columnHeader: ColumnHeaderNode,
 };
 
+const edgeTypes: EdgeTypes = {
+  dynamic: DynamicEdge as any,
+};
+
 // ── Inner component (needs ReactFlowProvider) ──
 function VisualMapInner() {
   const { modelAPIs, mcpServers, agents } = useKubernetesStore();
   const [zoom, setZoom] = useState(1);
+  const [isCompact, setIsCompact] = useState(false);
 
   const {
     initialNodes,
     initialEdges,
     changed,
     isLocked,
-    direction,
     toggleLock,
     handleNodeDragStop,
     reLayout,
-    changeDirection,
   } = useVisualMapLayout(modelAPIs, mcpServers, agents);
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
@@ -107,6 +112,8 @@ function VisualMapInner() {
     fitView({ padding: 0.3, duration: 300 });
   }, [fitView]);
 
+  const toggleCompact = useCallback(() => setIsCompact(prev => !prev), []);
+
   const isEmpty = modelAPIs.length === 0 && mcpServers.length === 0 && agents.length === 0;
 
   if (isEmpty) {
@@ -120,7 +127,7 @@ function VisualMapInner() {
 
   return (
     <VisualMapZoomContext.Provider value={zoom}>
-      <VisualMapDirectionContext.Provider value={direction}>
+      <VisualMapCompactContext.Provider value={isCompact}>
         <TooltipProvider delayDuration={200}>
           <div className="h-[calc(100vh-140px)] w-full rounded-xl border border-border bg-card overflow-hidden relative">
             <VisualMapToolbar
@@ -128,14 +135,14 @@ function VisualMapInner() {
               statusFilter={statusFilter}
               searchQuery={searchQuery}
               isLocked={isLocked}
-              direction={direction}
+              isCompact={isCompact}
               onToggleKind={toggleKind}
               onToggleStatus={toggleStatus}
               onSearchChange={setSearchQuery}
               onReLayout={handleReLayout}
               onFitView={handleFitView}
               onToggleLock={toggleLock}
-              onChangeDirection={changeDirection}
+              onToggleCompact={toggleCompact}
             />
 
             <ReactFlow
@@ -145,13 +152,13 @@ function VisualMapInner() {
               onEdgesChange={onEdgesChange}
               onNodeDragStop={handleNodeDragStop}
               nodeTypes={nodeTypes}
+              edgeTypes={edgeTypes}
               nodesDraggable={!isLocked}
               fitView
               fitViewOptions={{ padding: 0.3 }}
               proOptions={{ hideAttribution: true }}
               minZoom={0.3}
               maxZoom={2}
-              defaultEdgeOptions={{ type: 'smoothstep', animated: true }}
             >
               <Background gap={20} size={1} className="!bg-background" />
               <Controls className="!bg-card !border-border !shadow-sm [&>button]:!bg-card [&>button]:!border-border [&>button]:!text-foreground" />
@@ -169,7 +176,7 @@ function VisualMapInner() {
             </ReactFlow>
           </div>
         </TooltipProvider>
-      </VisualMapDirectionContext.Provider>
+      </VisualMapCompactContext.Provider>
     </VisualMapZoomContext.Provider>
   );
 }

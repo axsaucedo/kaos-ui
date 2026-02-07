@@ -2,8 +2,6 @@ import type { ModelAPI, MCPServer, Agent } from '@/types/kubernetes';
 
 export type ResourceKind = 'ModelAPI' | 'MCPServer' | 'Agent';
 
-export type LayoutDirection = 'LR' | 'RL' | 'TB' | 'BT';
-
 export interface ResourceNodeData {
   label: string;
   namespace: string;
@@ -31,13 +29,6 @@ export const RESOURCE_ROUTES: Record<ResourceKind, string> = {
   MCPServer: 'mcpservers',
   Agent: 'agents',
 };
-
-export const LAYOUT_OPTIONS: { value: LayoutDirection; label: string }[] = [
-  { value: 'LR', label: 'Left → Right' },
-  { value: 'RL', label: 'Right → Left' },
-  { value: 'TB', label: 'Top → Bottom' },
-  { value: 'BT', label: 'Bottom → Top' },
-];
 
 export const RESOURCE_QUICK_ACTIONS: Record<ResourceKind, { icon: string; label: string; tab: string }[]> = {
   Agent: [

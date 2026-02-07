@@ -4,12 +4,12 @@ import { Handle, Position } from '@xyflow/react';
 import { Box, Server, Bot, Info, MessageSquare, Brain, Wrench, Stethoscope, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import type { ResourceNodeData, ResourceKind, LayoutDirection } from './types';
+import type { ResourceNodeData, ResourceKind } from './types';
 import { RESOURCE_ROUTES } from './types';
 
-// Context for zoom level + layout direction
+// Context for zoom level and compact mode toggle
 export const VisualMapZoomContext = createContext<number>(1);
-export const VisualMapDirectionContext = createContext<LayoutDirection>('LR');
+export const VisualMapCompactContext = createContext<boolean>(false);
 
 const ICON_MAP = { Box, Server, Bot, Info, MessageSquare, Brain, Wrench, Stethoscope };
 
@@ -79,26 +79,15 @@ function hasWarning(statusMessage?: string): boolean {
   return lower.includes('error') || lower.includes('warning') || lower.includes('fail') || lower.includes('crash');
 }
 
-/** Get handle positions based on layout direction */
-function getHandlePositions(dir: LayoutDirection): { source: Position; target: Position } {
-  switch (dir) {
-    case 'LR': return { source: Position.Right, target: Position.Left };
-    case 'RL': return { source: Position.Left, target: Position.Right };
-    case 'TB': return { source: Position.Bottom, target: Position.Top };
-    case 'BT': return { source: Position.Top, target: Position.Bottom };
-  }
-}
-
 export function ResourceNode({ data }: { data: ResourceNodeData }) {
   const navigate = useNavigate();
   const zoom = useContext(VisualMapZoomContext);
-  const direction = useContext(VisualMapDirectionContext);
+  const compactToggle = useContext(VisualMapCompactContext);
   const config = RESOURCE_CONFIG[data.resourceType];
   const Icon = config.icon;
   const route = RESOURCE_ROUTES[data.resourceType];
   const { namespace, name } = data.resource.metadata;
   const basePath = `/${route}/${namespace}/${name}`;
-  const { source: sourcePos, target: targetPos } = getHandlePositions(direction);
 
   const handleClick = () => navigate(basePath);
   const handleQuickAction = (tab: string, e: React.MouseEvent) => {
@@ -108,12 +97,23 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
 
   const statusDot = getStatusDotColor(data.status);
   const showWarning = hasWarning(data.statusMessage);
+  const isCompact = compactToggle || zoom < 0.6;
 
-  // ── Compact pill (zoom < 0.6) — now includes name ──
-  if (zoom < 0.6) {
+  // All 4 handles always present so dynamic edges can connect to any side
+  const handles = (
+    <>
+      <Handle type="target" position={Position.Top} id="top" className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+      <Handle type="target" position={Position.Left} id="left" className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+      <Handle type="source" position={Position.Bottom} id="bottom" className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+      <Handle type="source" position={Position.Right} id="right" className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+    </>
+  );
+
+  // ── Compact pill ──
+  if (isCompact) {
     return (
       <>
-        <Handle type="target" position={targetPos} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+        {handles}
         <div
           onClick={handleClick}
           className={`
@@ -127,15 +127,14 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
           <span className="text-[10px] font-medium text-foreground truncate max-w-[100px]">{data.label}</span>
           <div className={`w-2 h-2 rounded-full ${statusDot} shrink-0`} />
         </div>
-        <Handle type="source" position={sourcePos} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
       </>
     );
   }
 
-  // ── Full card (zoom >= 0.6) ──
+  // ── Full card ──
   return (
     <>
-      <Handle type="target" position={targetPos} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
+      {handles}
       <div
         onClick={handleClick}
         className={`
@@ -147,7 +146,6 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
         `}
         style={data.isDimmed ? { opacity: 0.15, pointerEvents: 'none' } : undefined}
       >
-        {/* Status dot + warning icon */}
         <div className="absolute -top-1.5 -right-1.5 flex items-center gap-1">
           <div className={`w-3 h-3 rounded-full ${statusDot} border-2 border-card`} />
           {showWarning && <AlertTriangle className="h-3 w-3 text-warning" />}
@@ -165,7 +163,6 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
           </Badge>
         </div>
 
-        {/* Detailed metadata at high zoom */}
         {zoom >= 1.2 && data.resource.metadata.labels && (
           <div className="border-t border-border/50 pt-1.5 mt-1 transition-opacity duration-200">
             {Object.entries(data.resource.metadata.labels).slice(0, 2).map(([k, v]) => (
@@ -176,7 +173,6 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
           </div>
         )}
 
-        {/* Quick-action icons */}
         <div className="flex items-center gap-1 mt-1.5 border-t border-border/50 pt-1.5">
           {config.quickActions.map((qa) => {
             const QAIcon = ICON_MAP[qa.icon];
@@ -196,7 +192,6 @@ export function ResourceNode({ data }: { data: ResourceNodeData }) {
           })}
         </div>
       </div>
-      <Handle type="source" position={sourcePos} className="!w-2 !h-2 !bg-muted-foreground/40 !border-none" />
     </>
   );
 }
