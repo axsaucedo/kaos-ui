@@ -33,7 +33,7 @@ import { validateKubernetesName } from './shared/EnvVarEditor';
 import type { MCPServer } from '@/types/kubernetes';
 
 // Runtime options based on KAOS registry
-type MCPServerRuntime = 'python-string' | 'kubernetes' | 'custom';
+type MCPServerRuntime = 'python-string' | 'kubernetes' | 'pctx' | 'custom';
 
 interface MCPServerFormData {
   name: string;
@@ -128,6 +128,8 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
         return 'Define Python tools inline. Params are passed via MCP_TOOLS_STRING env var.';
       case 'kubernetes':
         return 'Access Kubernetes API. Requires serviceAccountName with proper RBAC.';
+      case 'pctx':
+        return 'Aggregate multiple MCP servers into a unified endpoint using pctx (Port of Context).';
       case 'custom':
         return 'Use a custom container image. Specify image in environment settings.';
       default:
@@ -146,6 +148,15 @@ export function MCPServerCreateDialog({ open, onClose }: MCPServerCreateDialogPr
 namespaces:
   - default
   - kaos-hierarchy`;
+      case 'pctx':
+        return `{
+  "name": "unified-mcp",
+  "version": "1.0.0",
+  "servers": [
+    {"name": "calculator", "url": "http://mcpserver-calc.ns.svc:8000/mcp"},
+    {"name": "external", "url": "https://external-mcp.example.com/mcp"}
+  ]
+}`;
       case 'custom':
         return '# Custom runtime configuration';
       default:
@@ -211,6 +222,9 @@ namespaces:
                     <SelectItem value="kubernetes">
                       Kubernetes
                     </SelectItem>
+                    <SelectItem value="pctx">
+                      pctx (Aggregator)
+                    </SelectItem>
                     <SelectItem value="custom">
                       Custom
                     </SelectItem>
@@ -240,7 +254,7 @@ namespaces:
               {/* Params */}
               <div className="space-y-2">
                 <Label htmlFor="params">
-                  {watchedRuntime === 'python-string' ? 'Tool Definition (Python)' : 'Configuration (Params)'}
+                  {watchedRuntime === 'python-string' ? 'Tool Definition (Python)' : watchedRuntime === 'pctx' ? 'pctx Configuration (JSON)' : 'Configuration (Params)'}
                 </Label>
                 <Textarea
                   id="params"

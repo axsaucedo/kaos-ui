@@ -34,7 +34,7 @@ import { LabelsAnnotationsEditor } from '@/components/shared/LabelsAnnotationsEd
 import type { MCPServer } from '@/types/kubernetes';
 
 // Runtime options for new CRD format
-type MCPServerRuntime = 'python-string' | 'kubernetes' | 'custom';
+type MCPServerRuntime = 'python-string' | 'kubernetes' | 'pctx' | 'custom';
 
 interface MCPServerFormData {
   runtime: MCPServerRuntime;
@@ -192,12 +192,14 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
                   <SelectContent>
                     <SelectItem value="python-string">Python String</SelectItem>
                     <SelectItem value="kubernetes">Kubernetes</SelectItem>
+                    <SelectItem value="pctx">pctx (Aggregator)</SelectItem>
                     <SelectItem value="custom">Custom</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
                   {watchedRuntime === 'python-string' && 'Runs Python MCP tools from a string definition'}
                   {watchedRuntime === 'kubernetes' && 'Provides Kubernetes API tools (requires RBAC)'}
+                  {watchedRuntime === 'pctx' && 'Aggregates multiple MCP servers into a unified endpoint'}
                   {watchedRuntime === 'custom' && 'Custom runtime configuration'}
                 </p>
               </div>
@@ -213,6 +215,8 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
                       ? '# Python tool definitions...'
                       : watchedRuntime === 'kubernetes'
                       ? 'namespaces: default,kaos-system'
+                      : watchedRuntime === 'pctx'
+                      ? '{"name": "unified-mcp", "version": "1.0.0", "servers": [...]}'
                       : 'Runtime-specific parameters...'
                   }
                   className="font-mono text-xs min-h-[120px]"
@@ -220,6 +224,7 @@ export function MCPServerEditDialog({ mcpServer, open, onClose }: MCPServerEditD
                 <p className="text-xs text-muted-foreground">
                   {watchedRuntime === 'python-string' && 'Python code defining MCP tools'}
                   {watchedRuntime === 'kubernetes' && 'Kubernetes runtime parameters (e.g., namespaces)'}
+                  {watchedRuntime === 'pctx' && 'JSON config with name, version, and servers array'}
                   {watchedRuntime === 'custom' && 'Parameters passed to the custom runtime'}
                 </p>
               </div>

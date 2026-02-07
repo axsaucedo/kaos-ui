@@ -55,8 +55,8 @@ interface ModelAPIStatus {
 ```typescript
 interface MCPServerSpec {
   // New format (preferred)
-  runtime?: string;            // "python-string", "kubernetes", "custom"
-  params?: string;             // Runtime-specific YAML config
+  runtime?: string;            // "python-string", "kubernetes", "pctx", "custom"
+  params?: string;             // Runtime-specific config (YAML or JSON for pctx)
   serviceAccountName?: string; // For RBAC
   
   // Legacy format (backward compatible)
