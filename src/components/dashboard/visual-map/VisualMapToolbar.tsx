@@ -1,24 +1,23 @@
 import React from 'react';
-import { Search, LayoutGrid, Maximize, Lock, Unlock, ArrowRight, ArrowLeft, ArrowDown, ArrowUp } from 'lucide-react';
+import { Search, LayoutGrid, Maximize, Lock, Unlock, Minimize2, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import type { ResourceKind, LayoutDirection } from './types';
-import { LAYOUT_OPTIONS } from './types';
+import type { ResourceKind } from './types';
 
 interface VisualMapToolbarProps {
   kindFilter: Set<ResourceKind>;
   statusFilter: Set<string>;
   searchQuery: string;
   isLocked: boolean;
-  direction: LayoutDirection;
+  isCompact: boolean;
   onToggleKind: (kind: ResourceKind) => void;
   onToggleStatus: (status: string) => void;
   onSearchChange: (query: string) => void;
   onReLayout: () => void;
   onFitView: () => void;
   onToggleLock: () => void;
-  onChangeDirection: (dir: LayoutDirection) => void;
+  onToggleCompact: () => void;
 }
 
 const KIND_CHIPS: { kind: ResourceKind; label: string; colorVar: string }[] = [
@@ -27,37 +26,20 @@ const KIND_CHIPS: { kind: ResourceKind; label: string; colorVar: string }[] = [
   { kind: 'Agent', label: 'Agent', colorVar: '--agent-color' },
 ];
 
-const DIR_ICONS: Record<LayoutDirection, typeof ArrowRight> = {
-  LR: ArrowRight,
-  RL: ArrowLeft,
-  TB: ArrowDown,
-  BT: ArrowUp,
-};
-
 export function VisualMapToolbar({
   kindFilter,
   statusFilter,
   searchQuery,
   isLocked,
-  direction,
+  isCompact,
   onToggleKind,
   onToggleStatus,
   onSearchChange,
   onReLayout,
   onFitView,
   onToggleLock,
-  onChangeDirection,
+  onToggleCompact,
 }: VisualMapToolbarProps) {
-  // Cycle through directions on click
-  const cycleDirection = () => {
-    const dirs: LayoutDirection[] = ['LR', 'RL', 'TB', 'BT'];
-    const next = dirs[(dirs.indexOf(direction) + 1) % dirs.length];
-    onChangeDirection(next);
-  };
-
-  const DirIcon = DIR_ICONS[direction];
-  const dirLabel = LAYOUT_OPTIONS.find(o => o.value === direction)?.label || direction;
-
   return (
     <div className="absolute top-3 left-3 right-3 z-10 flex items-center gap-2 flex-wrap">
       {/* Search */}
@@ -119,12 +101,11 @@ export function VisualMapToolbar({
       <div className="flex items-center gap-1 bg-card/90 backdrop-blur-sm rounded-lg border border-border px-1 py-0.5">
         <Tooltip>
           <TooltipTrigger asChild>
-            <Button variant="ghost" size="xs" onClick={cycleDirection} className="h-7 px-1.5 gap-1 text-[10px]">
-              <DirIcon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{dirLabel}</span>
+            <Button variant="ghost" size="xs" onClick={onToggleCompact} className={`h-7 w-7 p-0 ${isCompact ? 'text-primary' : ''}`}>
+              {isCompact ? <Maximize2 className="h-3.5 w-3.5" /> : <Minimize2 className="h-3.5 w-3.5" />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Change layout direction</TooltipContent>
+          <TooltipContent>{isCompact ? 'Expand cards' : 'Compact pills'}</TooltipContent>
         </Tooltip>
 
         <Tooltip>

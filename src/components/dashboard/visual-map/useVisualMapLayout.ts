@@ -1,11 +1,18 @@
 import { useCallback, useRef, useState, useMemo } from 'react';
 import type { Node, Edge } from '@xyflow/react';
 import { computeLayout } from './layout-engine';
-import type { ResourceNodeData, LayoutDirection } from './types';
+import type { ResourceNodeData } from './types';
 import type { ModelAPI, MCPServer, Agent } from '@/types/kubernetes';
 import { MarkerType } from '@xyflow/react';
 
 const ROW_SPACING = 140;
+
+/**
+ * Column order: ModelAPI (0), Agent (1), MCPServer (2)
+ * Agents in the middle since they reference both ModelAPIs and MCPServers.
+ */
+const COLUMN_X: Record<string, number> = { ModelAPI: 0, Agent: 450, MCPServer: 900 };
+const COLUMN_ORDER = ['ModelAPI', 'MCPServer', 'Agent'] as const;
 
 function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agent[]) {
   const nodes: Node[] = [];
@@ -13,13 +20,14 @@ function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agen
   const nodeId = (kind: string, ns: string, name: string) => `${kind}/${ns}/${name}`;
 
   // Column headers
-  (['ModelAPI', 'MCPServer', 'Agent'] as const).forEach((key, i) => {
+  (['ModelAPI', 'Agent', 'MCPServer'] as const).forEach((key, i) => {
     const list = key === 'ModelAPI' ? modelAPIs : key === 'MCPServer' ? mcpServers : agents;
+    const labels: Record<string, string> = { ModelAPI: 'Model APIs', Agent: 'Agents', MCPServer: 'MCP Servers' };
     nodes.push({
       id: `header-${key}`,
       type: 'columnHeader',
       position: { x: i * 450, y: -60 },
-      data: { label: key === 'ModelAPI' ? 'Model APIs' : key === 'MCPServer' ? 'MCP Servers' : 'Agents', count: list.length },
+      data: { label: labels[key], count: list.length },
       draggable: false,
       selectable: false,
     });
@@ -29,7 +37,7 @@ function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agen
     nodes.push({
       id: nodeId('ModelAPI', r.metadata.namespace, r.metadata.name),
       type: 'resourceNode',
-      position: { x: 0, y: i * ROW_SPACING },
+      position: { x: COLUMN_X.ModelAPI, y: i * ROW_SPACING },
       data: {
         label: r.metadata.name, namespace: r.metadata.namespace,
         status: r.status?.phase || 'Unknown', statusMessage: r.status?.message,
@@ -42,7 +50,7 @@ function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agen
     nodes.push({
       id: nodeId('MCPServer', r.metadata.namespace, r.metadata.name),
       type: 'resourceNode',
-      position: { x: 450, y: i * ROW_SPACING },
+      position: { x: COLUMN_X.MCPServer, y: i * ROW_SPACING },
       data: {
         label: r.metadata.name, namespace: r.metadata.namespace,
         status: r.status?.phase || 'Unknown', statusMessage: r.status?.message,
@@ -56,7 +64,7 @@ function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agen
     nodes.push({
       id: agentId,
       type: 'resourceNode',
-      position: { x: 900, y: i * ROW_SPACING },
+      position: { x: COLUMN_X.Agent, y: i * ROW_SPACING },
       data: {
         label: agent.metadata.name, namespace: agent.metadata.namespace,
         status: agent.status?.phase || 'Unknown', statusMessage: agent.status?.message,
@@ -69,7 +77,7 @@ function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agen
       const sourceReady = modelAPIs.find(m => m.metadata.name === agent.spec.modelAPI && m.metadata.namespace === agent.metadata.namespace)?.status?.phase?.toLowerCase() === 'ready';
       edges.push({
         id: `edge-modelapi-${agent.metadata.name}`,
-        source: sourceId, target: agentId, type: 'smoothstep',
+        source: sourceId, target: agentId, type: 'dynamic',
         animated: sourceReady !== false, label: 'model',
         style: { stroke: 'hsl(var(--modelapi-color))', strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--modelapi-color))' },
@@ -83,7 +91,7 @@ function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agen
       const sourceReady = mcpServers.find(m => m.metadata.name === mcpName && m.metadata.namespace === agent.metadata.namespace)?.status?.phase?.toLowerCase() === 'ready';
       edges.push({
         id: `edge-mcp-${mcpName}-${agent.metadata.name}`,
-        source: sourceId, target: agentId, type: 'smoothstep',
+        source: sourceId, target: agentId, type: 'dynamic',
         animated: sourceReady !== false, label: 'tools',
         style: { stroke: 'hsl(var(--mcpserver-color))', strokeWidth: 2 },
         markerEnd: { type: MarkerType.ArrowClosed, color: 'hsl(var(--mcpserver-color))' },
@@ -96,10 +104,6 @@ function buildGraph(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agen
   return { nodes, edges };
 }
 
-/**
- * Serialize resource lists into a stable string for comparison.
- * Only includes fields that matter for graph structure (names, specs, status phases).
- */
 function resourceFingerprint(modelAPIs: ModelAPI[], mcpServers: MCPServer[], agents: Agent[]): string {
   const m = modelAPIs.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}`).sort().join(',');
   const s = mcpServers.map(r => `${r.metadata.namespace}/${r.metadata.name}:${r.status?.phase}`).sort().join(',');
@@ -114,26 +118,23 @@ export function useVisualMapLayout(
 ) {
   const lockedPositions = useRef<Map<string, { x: number; y: number }>>(new Map());
   const [isLocked, setIsLocked] = useState(false);
-  const [direction, setDirection] = useState<LayoutDirection>('LR');
   const prevFingerprint = useRef<string>('');
   const hasInitialized = useRef(false);
 
-  // Only recompute graph when resources actually change structurally
   const { initialNodes, initialEdges, changed } = useMemo(() => {
     const fp = resourceFingerprint(modelAPIs, mcpServers, agents);
     const structurallyChanged = fp !== prevFingerprint.current;
     prevFingerprint.current = fp;
 
     if (!structurallyChanged && hasInitialized.current) {
-      // Data refresh without structural change — return empty to signal no update needed
       return { initialNodes: [] as Node[], initialEdges: [] as Edge[], changed: false };
     }
 
     hasInitialized.current = true;
     const { nodes, edges } = buildGraph(modelAPIs, mcpServers, agents);
-    const layouted = computeLayout(nodes, edges, new Set(lockedPositions.current.keys()), { direction });
+    const layouted = computeLayout(nodes, edges, new Set(lockedPositions.current.keys()));
     return { initialNodes: layouted, initialEdges: edges, changed: true };
-  }, [modelAPIs, mcpServers, agents, direction]);
+  }, [modelAPIs, mcpServers, agents]);
 
   const handleNodeDragStop = useCallback((_: any, node: Node) => {
     lockedPositions.current.set(node.id, { ...node.position });
@@ -141,25 +142,18 @@ export function useVisualMapLayout(
 
   const reLayout = useCallback((currentNodes: Node[], currentEdges: Edge[]): Node[] => {
     lockedPositions.current.clear();
-    return computeLayout(currentNodes, currentEdges, new Set(), { direction });
-  }, [direction]);
+    return computeLayout(currentNodes, currentEdges, new Set());
+  }, []);
 
   const toggleLock = useCallback(() => setIsLocked((prev) => !prev), []);
-
-  const changeDirection = useCallback((dir: LayoutDirection) => {
-    setDirection(dir);
-    lockedPositions.current.clear();
-  }, []);
 
   return {
     initialNodes,
     initialEdges,
     changed,
     isLocked,
-    direction,
     toggleLock,
     handleNodeDragStop,
     reLayout,
-    changeDirection,
   };
 }
