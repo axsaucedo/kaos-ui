@@ -5,8 +5,6 @@ import {
   RefreshCw, 
   AlertCircle, 
   CheckCircle2,
-  ChevronDown, 
-  ChevronRight,
   Copy,
   Check,
   Loader2
@@ -18,12 +16,6 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { k8sClient } from '@/lib/kubernetes-client';
 import type { MCPServer } from '@/types/kubernetes';
 import type { MCPTool, MCPToolCallResult } from '@/types/mcp';
@@ -169,7 +161,6 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
   const [toolArgs, setToolArgs] = useState<Record<string, string>>({});
   const [isCallingTool, setIsCallingTool] = useState(false);
   const [callHistory, setCallHistory] = useState<ToolCallHistory[]>([]);
-  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Session state
@@ -368,18 +359,6 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
     }
   };
 
-  // Toggle tool expansion
-  const toggleToolExpanded = (toolName: string) => {
-    setExpandedTools(prev => {
-      const next = new Set(prev);
-      if (next.has(toolName)) {
-        next.delete(toolName);
-      } else {
-        next.add(toolName);
-      }
-      return next;
-    });
-  };
 
   // Copy result to clipboard
   const handleCopyResult = async (id: string, content: string) => {
@@ -457,80 +436,45 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
               </div>
             ) : (
               <div className="p-2 space-y-1">
-                {tools.map((tool) => (
-                  <Collapsible
-                    key={tool.name}
-                    open={expandedTools.has(tool.name)}
-                    onOpenChange={() => toggleToolExpanded(tool.name)}
-                  >
-                    <div
-                      className={`rounded-lg border transition-colors ${
+                {tools.map((tool) => {
+                  const schema = getToolSchema(tool);
+                  const paramEntries = schema?.properties ? Object.entries(schema.properties) : [];
+                  return (
+                    <button
+                      key={tool.name}
+                      className={`w-full text-left rounded-lg border transition-colors p-2 ${
                         selectedTool?.name === tool.name
                           ? 'border-mcpserver bg-mcpserver/10'
                           : 'border-border hover:border-muted-foreground/50'
                       }`}
+                      onClick={() => handleSelectTool(tool)}
                     >
-                      <CollapsibleTrigger asChild>
-                        <button className="w-full p-2 text-left">
-                          <div className="flex items-start gap-2">
-                            {expandedTools.has(tool.name) ? (
-                              <ChevronDown className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                            )}
-                            <div className="flex-1 min-w-0">
-                              <div className="font-mono text-sm font-medium truncate">
-                                {tool.name}
-                              </div>
-                              <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
-                                {tool.description}
-                              </p>
+                      <div className="font-mono text-sm font-medium truncate">
+                        {tool.name}
+                      </div>
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                        {tool.description}
+                      </p>
+                      {paramEntries.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1.5">
+                          {paramEntries.map(([name, param]) => (
+                            <div key={name} className="flex items-center gap-1 text-xs">
+                              <code className="bg-muted px-1 py-0.5 rounded font-mono text-[10px]">
+                                {name}
+                              </code>
+                              <Badge variant={getTypeBadgeVariant(param.type)} className="text-[10px]">
+                                {param.type}
+                              </Badge>
                             </div>
-                          </div>
-                        </button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent>
-                        <div className="px-2 pb-2 pt-0">
-                          <Separator className="mb-2" />
-                          <div className="space-y-2">
-                            {(() => {
-                              const schema = getToolSchema(tool);
-                              return schema?.properties && Object.entries(schema.properties).length > 0 ? (
-                                Object.entries(schema.properties).map(([name, param]) => (
-                                  <div key={name} className="flex items-start gap-2 text-xs">
-                                    <code className="bg-muted px-1 py-0.5 rounded font-mono">
-                                      {name}
-                                    </code>
-                                    <Badge variant={getTypeBadgeVariant(param.type)} className="text-[10px]">
-                                      {param.type}
-                                    </Badge>
-                                    {schema.required?.includes(name) && (
-                                      <Badge variant="destructive" className="text-[10px]">
-                                        required
-                                      </Badge>
-                                    )}
-                                  </div>
-                                ))
-                              ) : (
-                                <p className="text-xs text-muted-foreground">No parameters</p>
-                              );
-                            })()}
-                          </div>
-                          <Button
-                            size="sm"
-                            className="w-full mt-2 bg-mcpserver hover:bg-mcpserver/90"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleSelectTool(tool);
-                            }}
-                          >
-                            Select Tool
-                          </Button>
+                          ))}
                         </div>
-                      </CollapsibleContent>
-                    </div>
-                  </Collapsible>
-                ))}
+                      )}
+                      {paramEntries.length === 0 && (
+                        <p className="text-[10px] text-muted-foreground mt-1">No parameters</p>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </ScrollArea>
@@ -659,7 +603,7 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
                                 </Button>
                               </div>
                             </div>
-                            <pre className="text-xs bg-background rounded p-2 overflow-auto max-h-32">
+                            <pre className="text-xs bg-background rounded p-2 overflow-auto max-h-48 whitespace-pre-wrap break-all">
                               {entry.error || JSON.stringify(entry.result, null, 2)}
                             </pre>
                           </div>
