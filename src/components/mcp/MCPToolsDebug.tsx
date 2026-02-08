@@ -543,23 +543,23 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
                               {param.description && (
                                 <p className="text-xs text-muted-foreground mb-1.5">{param.description}</p>
                               )}
-                              {param.type === 'object' || param.type === 'array' ? (
-                                <Textarea
-                                  id={name}
-                                  value={toolArgs[name] || ''}
-                                  onChange={(e) => setToolArgs(prev => ({ ...prev, [name]: e.target.value }))}
-                                  placeholder={`Enter ${param.type} as JSON...`}
-                                  className="font-mono text-sm"
-                                  rows={3}
-                                />
-                              ) : (
+                              {param.type === 'integer' || param.type === 'number' ? (
                                 <Input
                                   id={name}
-                                  type={param.type === 'integer' || param.type === 'number' ? 'number' : 'text'}
+                                  type="number"
                                   value={toolArgs[name] || ''}
                                   onChange={(e) => setToolArgs(prev => ({ ...prev, [name]: e.target.value }))}
                                   placeholder={param.default !== undefined ? String(param.default) : `Enter ${name}...`}
                                   className="font-mono"
+                                />
+                              ) : (
+                                <Textarea
+                                  id={name}
+                                  value={toolArgs[name] || ''}
+                                  onChange={(e) => setToolArgs(prev => ({ ...prev, [name]: e.target.value }))}
+                                  placeholder={param.default !== undefined ? String(param.default) : `Enter ${name}...`}
+                                  className="font-mono text-sm"
+                                  rows={3}
                                 />
                               )}
                             </div>
