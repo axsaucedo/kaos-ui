@@ -163,8 +163,8 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
   const [selectedTool, setSelectedTool] = useState<MCPTool | null>(null);
   const [toolArgs, setToolArgs] = useState<Record<string, string>>({});
   const [isCallingTool, setIsCallingTool] = useState(false);
-  const [callHistory, setCallHistory] = useState<ToolCallHistory[]>([]);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [toolResults, setToolResults] = useState<Record<string, ToolCallHistory>>({});
+  const [copiedResult, setCopiedResult] = useState(false);
   const [descExpanded, setDescExpanded] = useState(false);
 
   // Session state
@@ -360,16 +360,16 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
       historyEntry.duration = Date.now() - startTime;
     } finally {
       setIsCallingTool(false);
-      setCallHistory(prev => [historyEntry, ...prev]);
+      setToolResults(prev => ({ ...prev, [selectedTool.name]: historyEntry }));
     }
   };
 
 
   // Copy result to clipboard
-  const handleCopyResult = async (id: string, content: string) => {
+  const handleCopyResult = async (content: string) => {
     await navigator.clipboard.writeText(content);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
+    setCopiedResult(true);
+    setTimeout(() => setCopiedResult(false), 2000);
   };
 
   // Get parameter type badge color
@@ -589,59 +589,50 @@ export function MCPToolsDebug({ mcpServer }: MCPToolsDebugProps) {
                     )}
                   </Button>
 
-                  {/* Call History */}
-                  {callHistory.length > 0 && (
-                    <div className="mt-6">
-                      <h4 className="text-sm font-medium mb-3">Call History</h4>
-                      <div className="space-y-2">
-                        {callHistory.map((entry) => {
-                          const resultStr = entry.error || JSON.stringify(entry.result, null, 2);
-                          const isJson = !entry.error && entry.result != null;
-                          return (
-                            <div
-                              key={entry.id}
-                              className="rounded-lg border border-border p-3 bg-muted/20"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2">
-                                  {entry.error ? (
-                                    <AlertCircle className="h-4 w-4 text-destructive" />
-                                  ) : (
-                                    <CheckCircle2 className="h-4 w-4 text-green-500" />
-                                  )}
-                                  <span className="font-mono text-sm">{entry.toolName}</span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <span>{entry.duration}ms</span>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={() => handleCopyResult(entry.id, resultStr)}
-                                  >
-                                    {copiedId === entry.id ? (
-                                      <Check className="h-3 w-3" />
-                                    ) : (
-                                      <Copy className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                </div>
-                              </div>
-                              <div className="bg-background rounded p-2 overflow-auto max-h-64">
-                                {isJson ? (
-                                  <JsonSyntaxHighlight json={resultStr} />
-                                ) : (
-                                  <pre className="text-xs font-mono whitespace-pre-wrap break-all text-destructive">
-                                    {resultStr}
-                                  </pre>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
+                  {/* Result */}
+                  {(() => {
+                    const result = selectedTool ? toolResults[selectedTool.name] : null;
+                    if (!result) return null;
+                    const resultStr = result.error || JSON.stringify(result.result, null, 2);
+                    const isJson = !result.error && result.result != null;
+                    return (
+                      <div className="rounded-lg border border-border p-3 bg-muted/20">
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {result.error ? (
+                              <AlertCircle className="h-4 w-4 text-destructive" />
+                            ) : (
+                              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              {result.error ? 'Error' : 'Success'} · {result.duration}ms
+                            </span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleCopyResult(resultStr)}
+                          >
+                            {copiedResult ? (
+                              <Check className="h-3 w-3" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                        <div className="bg-background rounded p-2 overflow-auto max-h-64">
+                          {isJson ? (
+                            <JsonSyntaxHighlight json={resultStr} />
+                          ) : (
+                            <pre className="text-xs font-mono whitespace-pre-wrap break-all text-destructive">
+                              {resultStr}
+                            </pre>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </ScrollArea>
             </>
