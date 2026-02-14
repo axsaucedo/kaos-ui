@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Brain, Clock, RefreshCw, MessageSquare, User, Bot, Wrench, AlertCircle } from 'lucide-react';
+import { Brain, Clock, RefreshCw, MessageSquare, User, Bot, Wrench, AlertCircle, Users, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,13 +13,26 @@ import type { Agent } from '@/types/kubernetes';
 interface MemoryEvent {
   id: string;
   type: string;
-  role?: string;
-  content?: string;
+  content?: string | Record<string, unknown>;
   timestamp?: string;
   session_id?: string;
-  tool_name?: string;
-  tool_input?: any;
-  tool_output?: any;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Normalize a raw memory event from the backend API.
+ * The backend returns event_type/event_id but the UI uses type/id.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function normalizeEvent(raw: any): MemoryEvent {
+  return {
+    id: raw.event_id || raw.id,
+    type: raw.event_type || raw.type || 'unknown',
+    content: raw.content,
+    timestamp: raw.timestamp,
+    session_id: raw.session_id,
+    metadata: raw.metadata,
+  };
 }
 
 interface MemorySession {
@@ -78,7 +91,7 @@ export function AgentMemory({ agent }: AgentMemoryProps) {
       const eventsData = await eventsResponse.json();
       const sessionsData = await sessionsResponse.json();
 
-      setEvents(eventsData.events || []);
+      setEvents((eventsData.events || []).map(normalizeEvent));
       setSessions(sessionsData.sessions || []);
       setLastRefresh(new Date());
     } catch (err) {
@@ -106,17 +119,56 @@ export function AgentMemory({ agent }: AgentMemoryProps) {
   }, [fetchMemory, isMemoryEnabled]);
 
   const getEventIcon = (event: MemoryEvent) => {
-    if (event.role === 'user') return <User className="h-4 w-4 text-blue-500" />;
-    if (event.role === 'assistant') return <Bot className="h-4 w-4 text-agent" />;
-    if (event.type === 'tool_call' || event.tool_name) return <Wrench className="h-4 w-4 text-mcpserver" />;
-    return <MessageSquare className="h-4 w-4 text-muted-foreground" />;
+    switch (event.type) {
+      case 'user_message':
+        return <User className="h-4 w-4 text-blue-500" />;
+      case 'agent_response':
+        return <Bot className="h-4 w-4 text-agent" />;
+      case 'tool_call':
+      case 'tool_result':
+        return <Wrench className="h-4 w-4 text-mcpserver" />;
+      case 'tool_error':
+      case 'delegation_error':
+      case 'error':
+        return <AlertCircle className="h-4 w-4 text-destructive" />;
+      case 'delegation_request':
+      case 'delegation_response':
+      case 'task_delegation_received':
+        return <Users className="h-4 w-4 text-purple-500" />;
+      case 'format_warning':
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
+      default:
+        return <MessageSquare className="h-4 w-4 text-muted-foreground" />;
+    }
   };
 
   const getEventBadge = (event: MemoryEvent) => {
-    if (event.role === 'user') return <Badge variant="outline" className="text-xs">User</Badge>;
-    if (event.role === 'assistant') return <Badge variant="agent" className="text-xs">Assistant</Badge>;
-    if (event.type === 'tool_call' || event.tool_name) return <Badge variant="mcpserver" className="text-xs">Tool</Badge>;
-    return <Badge variant="secondary" className="text-xs">{event.type || 'Event'}</Badge>;
+    switch (event.type) {
+      case 'user_message':
+        return <Badge variant="outline" className="text-xs">User</Badge>;
+      case 'agent_response':
+        return <Badge variant="agent" className="text-xs">Agent</Badge>;
+      case 'tool_call':
+        return <Badge variant="mcpserver" className="text-xs">Tool Call</Badge>;
+      case 'tool_result':
+        return <Badge variant="outline" className="text-xs border-green-500/50 text-green-500">Tool Result</Badge>;
+      case 'tool_error':
+        return <Badge variant="destructive" className="text-xs">Tool Error</Badge>;
+      case 'delegation_request':
+        return <Badge variant="outline" className="text-xs border-purple-500/50 text-purple-500">Delegation</Badge>;
+      case 'delegation_response':
+        return <Badge variant="outline" className="text-xs border-purple-500/50 text-purple-500">Delegation Result</Badge>;
+      case 'delegation_error':
+        return <Badge variant="destructive" className="text-xs">Delegation Error</Badge>;
+      case 'task_delegation_received':
+        return <Badge variant="outline" className="text-xs border-blue-500/50 text-blue-500">Task Received</Badge>;
+      case 'format_warning':
+        return <Badge variant="outline" className="text-xs border-yellow-500/50 text-yellow-500">Warning</Badge>;
+      case 'error':
+        return <Badge variant="destructive" className="text-xs">Error</Badge>;
+      default:
+        return <Badge variant="secondary" className="text-xs">{event.type}</Badge>;
+    }
   };
 
   const formatTimestamp = (timestamp?: string) => {
@@ -144,6 +196,119 @@ export function AgentMemory({ agent }: AgentMemoryProps) {
       }
     }
     return String(content);
+  };
+
+  // Render structured content based on event type
+  const renderEventContent = (event: MemoryEvent) => {
+    const content = event.content;
+    if (!content) return null;
+
+    // Structured content for tool/delegation events
+    if (typeof content === 'object') {
+      const obj = content as Record<string, unknown>;
+
+      // tool_call: {tool, arguments}
+      if (event.type === 'tool_call' && obj.tool) {
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Wrench className="h-3 w-3" />
+              <span className="text-xs font-mono font-medium">{String(obj.tool)}</span>
+            </div>
+            {obj.arguments && (
+              <pre className="text-xs bg-background/50 p-2 rounded overflow-auto max-h-24">
+                {JSON.stringify(obj.arguments, null, 2)}
+              </pre>
+            )}
+          </div>
+        );
+      }
+
+      // tool_result: {tool, result}
+      if (event.type === 'tool_result' && obj.tool) {
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-green-500" />
+              <span className="text-xs font-mono font-medium">{String(obj.tool)}</span>
+            </div>
+            {obj.result !== undefined && (
+              <pre className="text-xs bg-background/50 p-2 rounded overflow-auto max-h-24 text-muted-foreground">
+                → {typeof obj.result === 'string' ? obj.result : JSON.stringify(obj.result, null, 2)}
+              </pre>
+            )}
+          </div>
+        );
+      }
+
+      // tool_error: {tool, error}
+      if (event.type === 'tool_error' && obj.tool) {
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-3 w-3 text-destructive" />
+              <span className="text-xs font-mono font-medium">{String(obj.tool)}</span>
+            </div>
+            <pre className="text-xs bg-destructive/10 p-2 rounded overflow-auto max-h-24 text-destructive">
+              {String(obj.error || 'Unknown error')}
+            </pre>
+          </div>
+        );
+      }
+
+      // delegation_request: {agent, task}
+      if (event.type === 'delegation_request' && obj.agent) {
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Users className="h-3 w-3 text-purple-500" />
+              <span className="text-xs font-mono font-medium">{String(obj.agent)}</span>
+            </div>
+            {obj.task && (
+              <p className="text-xs text-muted-foreground">{String(obj.task)}</p>
+            )}
+          </div>
+        );
+      }
+
+      // delegation_response: {agent, response}
+      if (event.type === 'delegation_response' && obj.agent) {
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Users className="h-3 w-3 text-purple-500" />
+              <span className="text-xs font-mono font-medium">{String(obj.agent)}</span>
+            </div>
+            {obj.response && (
+              <pre className="text-xs bg-background/50 p-2 rounded overflow-auto max-h-24 text-muted-foreground">
+                → {typeof obj.response === 'string' ? obj.response : JSON.stringify(obj.response, null, 2)}
+              </pre>
+            )}
+          </div>
+        );
+      }
+
+      // delegation_error: {agent, error}
+      if (event.type === 'delegation_error' && obj.agent) {
+        return (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-3 w-3 text-destructive" />
+              <span className="text-xs font-mono font-medium">{String(obj.agent)}</span>
+            </div>
+            <pre className="text-xs bg-destructive/10 p-2 rounded overflow-auto max-h-24 text-destructive">
+              {String(obj.error || 'Unknown error')}
+            </pre>
+          </div>
+        );
+      }
+
+      // Fallback for any other structured content
+      return <span>{safeContentToString(content)}</span>;
+    }
+
+    // String content
+    return <span>{String(content)}</span>;
   };
 
   // If memory is disabled, show a disabled state
@@ -273,34 +438,8 @@ export function AgentMemory({ agent }: AgentMemoryProps) {
                           
                           {/* Content */}
                           {event.content && (
-                            <p className="text-sm whitespace-pre-wrap break-words font-mono">
-                              {safeContentToString(event.content)}
-                            </p>
-                          )}
-                          
-                          {/* Tool Call Details */}
-                          {event.tool_name && (
-                            <div className="mt-2 space-y-1">
-                              <div className="flex items-center gap-2">
-                                <Wrench className="h-3 w-3" />
-                                <span className="text-xs font-mono font-medium">
-                                  {event.tool_name}
-                                </span>
-                              </div>
-                              {event.tool_input && (
-                                <pre className="text-xs bg-background/50 p-2 rounded overflow-auto max-h-24">
-                                  {typeof event.tool_input === 'string'
-                                    ? event.tool_input
-                                    : JSON.stringify(event.tool_input, null, 2)}
-                                </pre>
-                              )}
-                              {event.tool_output && (
-                                <pre className="text-xs bg-background/50 p-2 rounded overflow-auto max-h-24 text-muted-foreground">
-                                  → {typeof event.tool_output === 'string'
-                                    ? event.tool_output
-                                    : JSON.stringify(event.tool_output, null, 2)}
-                                </pre>
-                              )}
+                            <div className="text-sm whitespace-pre-wrap break-words font-mono">
+                              {renderEventContent(event)}
                             </div>
                           )}
                         </div>

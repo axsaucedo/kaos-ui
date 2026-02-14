@@ -2,8 +2,8 @@
  * Dedicated Agent Chat Client
  * 
  * Handles SSE streaming for agent chat completions via the K8s service proxy.
- * Separated from the general-purpose K8s client to isolate streaming concerns,
- * artifact filtering, and progress block parsing.
+ * Separated from the general-purpose K8s client to isolate streaming concerns
+ * and progress block parsing.
  */
 
 import { k8sClient } from './kubernetes-client';
@@ -26,8 +26,9 @@ export interface StreamAgentChatOptions {
 /**
  * Stream a chat completion request to an agent service via the K8s API proxy.
  * 
- * Builds the proxy URL directly, sets SSE-friendly headers to prevent
- * infrastructure buffering, and parses the stream inline.
+ * The agent uses a two-phase agentic loop:
+ * - Phase 1: Progress events (tool_call/delegate actions as JSON in delta.content)
+ * - Phase 2: Streamed final response text in delta.content
  */
 export async function streamAgentChat(
   serviceName: string,
@@ -115,19 +116,6 @@ export async function streamAgentChat(
     const decoder = new TextDecoder();
     let buffer = '';
     let receivedSessionId: string | undefined;
-    // Accumulate raw content to enable cross-chunk artifact cleanup
-    let accumulatedContent = '';
-
-    const finalCleanup = () => {
-      // Clean artifacts that may span multiple SSE chunks
-      let cleaned = accumulatedContent;
-      cleaned = cleaned.replace(/```json\s*\{\s*\}\s*```\s*/g, '');
-      cleaned = cleaned.replace(/\*\*Final Response to User:\*\*\s*/g, '');
-      cleaned = cleaned.replace(/\*\*Final Response:\*\*\s*/g, '');
-      cleaned = cleaned.replace(/^\s*\{\s*\}\s*/g, '');
-      cleaned = cleaned.replace(/\s*\{\s*\}\s*$/g, '');
-      return cleaned.trim();
-    };
 
     while (true) {
       const { done, value } = await reader.read();
@@ -159,9 +147,6 @@ export async function streamAgentChat(
             if (content !== undefined && content !== null && content !== '') {
               const trimmedContent = content.trim();
 
-              // Skip standalone empty JSON objects
-              if (trimmedContent === '{}') continue;
-
               // Detect progress blocks (stringified JSON with type=progress)
               if (trimmedContent.startsWith('{')) {
                 try {
@@ -176,17 +161,7 @@ export async function streamAgentChat(
                 }
               }
 
-              // Skip chunks that are just markdown code fence openers/closers
-              if (trimmedContent === '```' || trimmedContent === '```json') continue;
-
-              // Strip known artifact headers inline
-              let cleaned = content;
-              cleaned = cleaned.replace(/\*\*Final Response to User:\*\*\s*/g, '');
-              cleaned = cleaned.replace(/\*\*Final Response:\*\*\s*/g, '');
-              if (cleaned.trim() === '') continue;
-
-              accumulatedContent += cleaned;
-              onChunk(cleaned);
+              onChunk(content);
             }
           } catch {
             console.warn('[agentClient] Skipping unparseable SSE line:', trimmed);

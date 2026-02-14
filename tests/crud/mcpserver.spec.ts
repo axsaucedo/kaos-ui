@@ -129,19 +129,22 @@ test.describe('MCPServer CRUD Operations', () => {
       // Click the edit button (second button in actions)
       const editButton = testRow.locator('button').nth(1);
       await editButton.click();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
+      
+      // Wait for edit dialog — use last() because create+edit dialogs may both mount
+      const dialog = page.locator('[role="dialog"]').last();
+      await dialog.waitFor({ state: 'visible', timeout: 5000 });
       
       // Modify the params/code
-      const codeInput = page.locator('textarea').first();
+      const codeInput = dialog.locator('textarea').first();
       if (await codeInput.isVisible()) {
         await codeInput.fill(`def greet(name: str) -> str:
     """Greet someone by name - updated."""
     return f"Hello there, {name}!"`);
       }
       
-      // Submit the update
-      const submitButton = page.getByRole('button', { name: /update|save|submit/i }).last();
-      await submitButton.click();
+      // Submit the update — scope to the active dialog
+      await dialog.locator('button:has-text("Save Changes")').click();
       
       // Wait for the dialog to close
       await page.waitForTimeout(2000);
