@@ -2,8 +2,8 @@
  * Hook for managing chat state and streaming with an Agent
  * 
  * Supports:
- * - SSE streaming with stream=true
- * - Progress/reasoning step display during agentic loop
+ * - Two-phase agentic loop (Phase 1: progress events, Phase 2: streamed response)
+ * - Progress/reasoning step display during tool execution
  * - Background request survival across tab switches
  * - Session history recovery
  */
@@ -136,12 +136,7 @@ export function useAgentChat(options: UseAgentChatOptions) {
               const lastMessage = updated[updated.length - 1];
               if (lastMessage.role === 'assistant') {
                 lastMessage.isStreaming = false;
-                // Final cleanup: remove cross-chunk artifacts from accumulated content
-                let cleaned = lastMessage.content;
-                cleaned = cleaned.replace(/```json\s*\{\s*\}\s*```\s*/g, '');
-                cleaned = cleaned.replace(/^\s*\{\s*\}\s*/g, '');
-                cleaned = cleaned.replace(/\s*\{\s*\}\s*$/g, '');
-                lastMessage.content = cleaned.trim();
+                lastMessage.content = lastMessage.content.trim();
                 if (lastMessage.progressSteps) {
                   lastMessage.progressSteps = lastMessage.progressSteps.map(s => ({ ...s, completed: true }));
                 }
