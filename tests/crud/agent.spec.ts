@@ -107,20 +107,20 @@ test.describe('Agent CRUD Operations', () => {
       // Click the edit button (second button in actions - after view)
       const editButton = testRow.locator('button').nth(1);
       await editButton.click();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
       
-      // Wait for edit dialog
-      await page.waitForSelector('[role="dialog"]');
+      // Wait for edit dialog — use last() because create+edit dialogs may both mount
+      const dialog = page.locator('[role="dialog"]').last();
+      await dialog.waitFor({ state: 'visible', timeout: 5000 });
       
       // Update the instructions
-      const instructionsField = page.getByLabel(/instructions/i);
+      const instructionsField = dialog.locator('#instructions');
       if (await instructionsField.isVisible()) {
         await instructionsField.fill('Updated instructions for testing updates');
       }
       
-      // Submit the update
-      const submitButton = page.getByRole('button', { name: /update|save|submit/i }).last();
-      await submitButton.click();
+      // Submit the update — scope to the active dialog to avoid duplicate button matches
+      await dialog.locator('button:has-text("Save Changes")').click();
       
       // Wait for the dialog to close
       await page.waitForTimeout(2000);

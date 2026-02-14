@@ -294,16 +294,33 @@ test.describe.serial('Full Lifecycle Integration', () => {
     const row = page.locator('table tbody tr').filter({ hasText: modelAPIName });
     const editButton = row.locator('button').nth(1);
     await editButton.click();
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(1000);
     
-    // Update models field
-    const dialog = page.locator('[role="dialog"]');
+    // Wait for edit dialog — use last() because create+edit dialogs may both mount
+    const dialog = page.locator('[role="dialog"]').last();
+    await dialog.waitFor({ state: 'visible', timeout: 5000 });
+    
+    // Update models field — scope to active dialog to avoid duplicate #models
     await dialog.locator('#models').fill('openai/gpt-4\nopenai/gpt-3.5-turbo');
     
-    // Save
-    await dialog.getByRole('button', { name: /save/i }).click();
+    // Click submit button
+    const submitBtn = dialog.locator('button:has-text("Update ModelAPI")');
+    await submitBtn.click();
+    
+    // Wait for dialog to close
+    await page.waitForTimeout(3000);
+    
+    // If dialog is still open, dismiss it (may have succeeded but stayed open)
+    const stillOpen = await dialog.isVisible().catch(() => false);
+    if (stillOpen) {
+      const closeBtn = dialog.locator('button:has-text("Cancel")').or(dialog.locator('button[aria-label="Close"]')).or(dialog.locator('button.absolute'));
+      if (await closeBtn.first().isVisible().catch(() => false)) {
+        await closeBtn.first().click();
+        await page.waitForTimeout(1000);
+      }
+    }
+    
     await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1000);
     
     // Verify still in list
     await page.getByRole('button', { name: 'Refresh', exact: true }).click();

@@ -92,7 +92,7 @@ test.describe('ModelAPI CRUD Operations', () => {
       
       // If there's an error, log it for debugging
       if (hasError) {
-        const errorText = await page.locator('[role="alert"], .error, text=error').textContent();
+        const errorText = await page.locator('[role="alert"]').textContent();
         console.log('Error during creation:', errorText);
       }
       
@@ -119,17 +119,20 @@ test.describe('ModelAPI CRUD Operations', () => {
       // Click the edit button (second button in actions)
       const editButton = testRow.locator('button').nth(1);
       await editButton.click();
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
       
-      // Modify the models
-      const modelsInput = page.getByLabel(/models/i).or(page.locator('textarea').first());
+      // Wait for edit dialog — use last() because create+edit dialogs may both mount
+      const dialog = page.locator('[role="dialog"]').last();
+      await dialog.waitFor({ state: 'visible', timeout: 5000 });
+      
+      // Modify the models — scope to the active dialog to avoid duplicate #models
+      const modelsInput = dialog.locator('#models');
       if (await modelsInput.isVisible()) {
         await modelsInput.fill('openai/gpt-4\nopenai/gpt-3.5-turbo\nanthropic/claude-3');
       }
       
-      // Submit the update
-      const submitButton = page.getByRole('button', { name: /update|save|submit/i }).last();
-      await submitButton.click();
+      // Submit the update — scope to the active dialog
+      await dialog.locator('button:has-text("Update ModelAPI")').click();
       
       // Wait for the dialog to close
       await page.waitForTimeout(2000);
