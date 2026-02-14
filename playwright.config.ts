@@ -5,7 +5,7 @@ import { defineConfig, devices } from '@playwright/test';
  * 
  * Prerequisites:
  * - npm run dev (starts UI at http://localhost:8080) - run this manually before tests
- * - kaos proxy (starts K8s proxy, usually on another port like 8081)
+ * - kaos proxy (starts K8s proxy at http://localhost:8010)
  * - Cluster with resources in kaos-hierarchy namespace
  */
 export default defineConfig({
@@ -35,7 +35,7 @@ export default defineConfig({
   /* Shared settings for all the projects below */
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: 'http://localhost:8081',
+    baseURL: 'http://localhost:8080',
 
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
