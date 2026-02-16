@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import { Bot, Plus, Trash2 } from 'lucide-react';
+import { Bot, Plus, Trash2, Info } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
@@ -52,6 +57,7 @@ interface AgentFormData {
   memoryContextLimit: number | undefined;
   memoryMaxSessions: number | undefined;
   memoryMaxSessionEvents: number | undefined;
+  toolCallMode: 'auto' | 'native' | 'string';
   // Labels and annotations
   labels: { key: string; value: string }[];
   annotations: { key: string; value: string }[];
@@ -100,6 +106,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
       memoryContextLimit: agent.spec.config?.memory?.contextLimit,
       memoryMaxSessions: agent.spec.config?.memory?.maxSessions,
       memoryMaxSessionEvents: agent.spec.config?.memory?.maxSessionEvents,
+      toolCallMode: agent.spec.config?.toolCallMode || 'auto',
       labels: recordToArray(agent.metadata.labels),
       annotations: recordToArray(agent.metadata.annotations),
     },
@@ -111,6 +118,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
   const watchedNetworkAccess = watch('networkAccess');
   const watchedWaitForDependencies = watch('waitForDependencies');
   const watchedMemoryEnabled = watch('memoryEnabled');
+  const watchedToolCallMode = watch('toolCallMode');
 
   useEffect(() => {
     reset({
@@ -129,6 +137,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
       memoryContextLimit: agent.spec.config?.memory?.contextLimit,
       memoryMaxSessions: agent.spec.config?.memory?.maxSessions,
       memoryMaxSessionEvents: agent.spec.config?.memory?.maxSessionEvents,
+      toolCallMode: agent.spec.config?.toolCallMode || 'auto',
       labels: recordToArray(agent.metadata.labels),
       annotations: recordToArray(agent.metadata.annotations),
     });
@@ -176,6 +185,7 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
             description: data.description || undefined,
             instructions: data.instructions || undefined,
             reasoningLoopMaxSteps: data.reasoningLoopMaxSteps || undefined,
+            toolCallMode: data.toolCallMode !== 'auto' ? data.toolCallMode : undefined,
             memory: memoryConfig,
           },
           container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
@@ -505,6 +515,41 @@ export function AgentEditDialog({ agent, open, onClose }: AgentEditDialogProps) 
                 fields={envVars}
                 onChange={setEnvVars}
               />
+
+              <Separator />
+
+              {/* Tool Call Mode */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Tool Call Mode</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-[280px]">
+                      <p className="text-xs"><strong>Auto</strong> (default): Detects whether the model supports native function calling, falling back to string-based tool calls.</p>
+                      <p className="text-xs mt-1"><strong>Native</strong>: Forces OpenAI-compatible structured tool calling.</p>
+                      <p className="text-xs mt-1"><strong>String</strong>: Forces text-based JSON tool calls for models without native support.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select
+                  value={watchedToolCallMode}
+                  onValueChange={(value: 'auto' | 'native' | 'string') => setValue('toolCallMode', value)}
+                >
+                  <SelectTrigger className="font-mono text-sm">
+                    <SelectValue placeholder="auto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">auto</SelectItem>
+                    <SelectItem value="native">native</SelectItem>
+                    <SelectItem value="string">string</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">
+                  How the agent invokes tools and delegates to sub-agents
+                </p>
+              </div>
 
               <Separator />
 
