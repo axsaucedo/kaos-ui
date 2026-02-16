@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Bot } from 'lucide-react';
+import { Bot, Info } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +23,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import { useToast } from '@/hooks/use-toast';
 import { useKubernetesStore } from '@/stores/kubernetesStore';
 import { useKubernetesConnection } from '@/contexts/KubernetesConnectionContext';
@@ -48,6 +53,7 @@ interface AgentFormData {
   memoryContextLimit: number | undefined;
   memoryMaxSessions: number | undefined;
   memoryMaxSessionEvents: number | undefined;
+  toolCallMode: 'auto' | 'native' | 'string';
 }
 
 interface AgentCreateDialogProps {
@@ -82,6 +88,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
       memoryContextLimit: undefined,
       memoryMaxSessions: undefined,
       memoryMaxSessionEvents: undefined,
+      toolCallMode: 'auto',
     },
   });
 
@@ -90,6 +97,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
   const watchedNetworkExpose = watch('networkExpose');
   const watchedNetworkAccess = watch('networkAccess');
   const watchedMemoryEnabled = watch('memoryEnabled');
+  const watchedToolCallMode = watch('toolCallMode');
 
   const validateUniqueName = (name: string) => {
     if (agents.some((agent) => agent.metadata.name === name)) {
@@ -150,6 +158,7 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
           config: {
             description: data.description,
             instructions: data.instructions,
+            toolCallMode: data.toolCallMode !== 'auto' ? data.toolCallMode : undefined,
             memory: memoryConfig,
           },
           container: k8sEnvVars.length > 0 ? { env: k8sEnvVars } : undefined,
@@ -422,6 +431,41 @@ export function AgentCreateDialog({ open, onClose }: AgentCreateDialogProps) {
                 fields={envVars}
                 onChange={setEnvVars}
               />
+
+              <Separator />
+
+              {/* Tool Call Mode */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm font-medium">Tool Call Mode</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent side="right" className="max-w-[280px]">
+                      <p className="text-xs"><strong>Auto</strong> (default): Detects whether the model supports native function calling, falling back to string-based tool calls.</p>
+                      <p className="text-xs mt-1"><strong>Native</strong>: Forces OpenAI-compatible structured tool calling.</p>
+                      <p className="text-xs mt-1"><strong>String</strong>: Forces text-based JSON tool calls for models without native support.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <Select
+                  value={watchedToolCallMode}
+                  onValueChange={(value: 'auto' | 'native' | 'string') => setValue('toolCallMode', value)}
+                >
+                  <SelectTrigger className="font-mono text-sm">
+                    <SelectValue placeholder="auto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="auto">auto</SelectItem>
+                    <SelectItem value="native">native</SelectItem>
+                    <SelectItem value="string">string</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">
+                  How the agent invokes tools and delegates to sub-agents
+                </p>
+              </div>
             </div>
           </ScrollArea>
 

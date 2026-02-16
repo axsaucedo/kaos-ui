@@ -162,6 +162,14 @@ export function AgentOverview({ agent }: AgentOverviewProps) {
               value={<span className="font-mono">{spec.config.reasoningLoopMaxSteps}</span>}
             />
           )}
+          <InfoRow
+            label="Tool Call Mode"
+            value={
+              <Badge variant="toolmode">
+                {spec.config?.toolCallMode || 'auto'}
+              </Badge>
+            }
+          />
           {spec.waitForDependencies !== undefined && (
             <InfoRow
               label="Wait for Dependencies"

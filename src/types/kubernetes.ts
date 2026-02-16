@@ -268,6 +268,8 @@ export interface AgentConfig {
   instructions?: string;
   // ReasoningLoopMaxSteps is the maximum number of reasoning steps before stopping (1-20, default 5)
   reasoningLoopMaxSteps?: number;
+  // ToolCallMode controls how the agent invokes tools: "auto" (default), "native", or "string"
+  toolCallMode?: 'auto' | 'native' | 'string';
   // Memory system configuration
   memory?: AgentMemoryConfig;
   // Env variables to pass to the agent runtime

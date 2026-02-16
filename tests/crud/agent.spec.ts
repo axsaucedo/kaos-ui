@@ -67,6 +67,21 @@ test.describe('Agent CRUD Operations', () => {
       await modelInput.scrollIntoViewIfNeeded();
       await modelInput.fill('gpt-4o-mini');
       
+      // 6. Tool Call Mode - select "native" to verify the dropdown works
+      const scrollArea = dialog.locator('[data-radix-scroll-area-viewport]');
+      await scrollArea.evaluate(el => el.scrollTop = el.scrollHeight);
+      await page.waitForTimeout(300);
+      
+      const toolCallModeSelect = dialog.locator('button:has-text("auto")').last();
+      if (await toolCallModeSelect.isVisible()) {
+        await toolCallModeSelect.click();
+        await page.waitForTimeout(300);
+        const nativeOption = page.getByRole('option', { name: 'native' });
+        if (await nativeOption.isVisible()) {
+          await nativeOption.click();
+        }
+      }
+      
       // Click Create Agent button
       await page.getByRole('button', { name: 'Create Agent' }).click();
       

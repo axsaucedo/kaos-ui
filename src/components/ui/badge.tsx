@@ -23,6 +23,8 @@ const badgeVariants = cva(
         pod: "border-transparent bg-pod/20 text-pod",
         deployment: "border-transparent bg-deployment/20 text-deployment",
         volume: "border-transparent bg-volume/20 text-volume",
+        // Config badges
+        toolmode: "border-transparent bg-purple-500/20 text-purple-500",
         // Status badges
         running: "border-transparent bg-success/20 text-success",
         pending: "border-transparent bg-warning/20 text-warning",
