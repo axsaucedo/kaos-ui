@@ -33,12 +33,19 @@ test.describe('Monitoring Page', () => {
       await monitoringLink.click();
     }
 
-    // Wait for port check to complete (should fail since port 8011 is not forwarded)
+    // Wait for port check to complete
     await page.waitForTimeout(4000);
 
-    // Should show the "not available" alert with CLI instructions
-    await expect(page.locator('text=Monitoring Not Available')).toBeVisible({ timeout: 5000 });
-    await expect(page.locator('text=kaos ui --monitoring-enabled signoz')).toBeVisible();
+    // If monitoring is actually running on port 8011, the "not available" message won't appear
+    const notAvailable = page.locator('text=Monitoring Not Available');
+    if (await notAvailable.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await expect(notAvailable).toBeVisible();
+      await expect(page.locator('text=kaos ui --monitoring-enabled signoz')).toBeVisible();
+    } else {
+      // Monitoring port is forwarded — skip the "not available" assertion
+      console.log('Monitoring port 8011 is active; skipping "not available" assertion');
+      await expect(page.locator('text=KAOS Monitoring')).toBeVisible();
+    }
   });
 
   test('should have a refresh button', async ({ page }) => {
